@@ -1,0 +1,40 @@
+# Java
+*.class
+*.jar
+*.war
+*.ear
+target/
+
+# IDEs
+.idea/
+.vscode/
+.settings/
+.project
+.classpath
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Environment
+.env
+
+# Maven Wrapper
+.mvn/wrapper/maven-wrapper.jar
+
+# IntelliJ
+out/
+
+# Eclipse
+bin/
+
+# Node
+node_modules/
+
+# macOS
+.AppleDouble
+.LSOverride
+
