@@ -3,6 +3,9 @@ package com.remi481.sentinel.service;
 import com.remi481.sentinel.entity.Device;
 import com.remi481.sentinel.repository.DeviceRepository;
 import org.springframework.stereotype.Service;
+import java.time.Instant;
+import java.util.UUID;
+import com.remi481.sentinel.entity.DeviceStatus;
 
 @Service
 public class DeviceService {
@@ -28,5 +31,20 @@ public class DeviceService {
                     return deviceRepository.save(existingDevice);
                 })
                 .orElseGet(() -> deviceRepository.save(device));
+
+
     }
+
+    public Device processHeartbeat(UUID uuid) {
+        return deviceRepository.findByUuid(uuid)
+                .map(device -> {
+                    device.setStatus(DeviceStatus.ONLINE);
+                    device.setLastSeen(Instant.now());
+
+                    return deviceRepository.save(device);
+                })
+                .orElseThrow(() -> new IllegalArgumentException("Device not found: " + uuid));
+    }
+
+
 }
