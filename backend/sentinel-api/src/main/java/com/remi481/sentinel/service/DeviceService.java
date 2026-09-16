@@ -46,5 +46,10 @@ public class DeviceService {
                 .orElseThrow(() -> new IllegalArgumentException("Device not found: " + uuid));
     }
 
+    public Device getDevice(UUID uuid) {
+        return deviceRepository.findByUuid(uuid)
+                .orElseThrow(() -> new IllegalArgumentException("Device not found: " + uuid));
+    }
+
 
 }

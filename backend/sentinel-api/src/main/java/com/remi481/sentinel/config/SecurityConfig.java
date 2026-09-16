@@ -15,6 +15,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/v1/devices/heartbeat").permitAll()
                         .requestMatchers("/api/v1/devices/register").permitAll()
+                        .requestMatchers("/api/v1/devices/**").permitAll()
                         .anyRequest().authenticated()
                 );
 
