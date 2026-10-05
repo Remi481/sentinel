@@ -6,6 +6,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import com.remi481.sentinel.dto.HeartbeatRequest;
 import java.util.UUID;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/devices")
@@ -33,5 +34,10 @@ public class DeviceController {
     public ResponseEntity<Device> getDevice(@PathVariable UUID uuid) {
         Device device = deviceService.getDevice(uuid);
         return ResponseEntity.ok(device);
+    }
+
+    @GetMapping
+    public ResponseEntity<List<Device>> getAllDevices() {
+        return ResponseEntity.ok(deviceService.getAllDevices());
     }
 }

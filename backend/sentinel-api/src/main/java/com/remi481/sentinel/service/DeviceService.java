@@ -5,6 +5,7 @@ import com.remi481.sentinel.exception.DeviceNotFoundException;
 import com.remi481.sentinel.repository.DeviceRepository;
 import org.springframework.stereotype.Service;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 import com.remi481.sentinel.entity.DeviceStatus;
 
@@ -50,6 +51,10 @@ public class DeviceService {
     public Device getDevice(UUID uuid) {
         return deviceRepository.findByUuid(uuid)
                 .orElseThrow(() -> new DeviceNotFoundException(uuid));
+    }
+
+    public List<Device> getAllDevices() {
+        return deviceRepository.findAll();
     }
 
 
