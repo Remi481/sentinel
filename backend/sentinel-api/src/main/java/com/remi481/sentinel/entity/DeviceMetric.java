@@ -39,4 +39,7 @@ public class DeviceMetric {
 
     @Column(name = "disk_total_bytes")
     private Long diskTotalBytes;
+
+    @Column(name = "uptime_seconds")
+    private Long uptimeSeconds;
 }

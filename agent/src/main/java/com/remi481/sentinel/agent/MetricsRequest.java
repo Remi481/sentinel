@@ -8,7 +8,8 @@ public record MetricsRequest(
         Long memoryUsedBytes,
         Long memoryTotalBytes,
         Long diskUsedBytes,
-        Long diskTotalBytes
+        Long diskTotalBytes,
+        Long uptimeSeconds
 ) {
 
     public static MetricsRequest of(UUID uuid, MetricsSnapshot snapshot) {
@@ -18,6 +19,7 @@ public record MetricsRequest(
                 snapshot.memoryUsedBytes(),
                 snapshot.memoryTotalBytes(),
                 snapshot.diskUsedBytes(),
-                snapshot.diskTotalBytes());
+                snapshot.diskTotalBytes(),
+                snapshot.uptimeSeconds());
     }
 }

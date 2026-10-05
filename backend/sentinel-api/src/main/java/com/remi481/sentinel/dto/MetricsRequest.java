@@ -8,7 +8,7 @@ public record MetricsRequest(
         Long memoryUsedBytes,
         Long memoryTotalBytes,
         Long diskUsedBytes,
-        Long diskTotalBytes
+        Long diskTotalBytes,
+        Long uptimeSeconds
 ) {
 }
-

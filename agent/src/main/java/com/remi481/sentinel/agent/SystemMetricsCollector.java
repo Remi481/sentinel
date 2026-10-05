@@ -26,7 +26,8 @@ public class SystemMetricsCollector {
         long diskTotal = root.getTotalSpace();
         long diskUsed = diskTotal - root.getUsableSpace();
 
-        return new MetricsSnapshot(readCpuPercent(), memoryUsed, memoryTotal, diskUsed, diskTotal);
+        return new MetricsSnapshot(readCpuPercent(), memoryUsed, memoryTotal,
+                diskUsed, diskTotal, readUptimeSeconds());
     }
 
     private Double readCpuPercent() {
@@ -53,5 +54,18 @@ public class SystemMetricsCollector {
             return null;
         }
         return null;
+    }
+
+    private Long readUptimeSeconds() {
+        Path uptime = Path.of("/proc/uptime");
+        if (!Files.isReadable(uptime)) {
+            return null;
+        }
+        try {
+            String firstValue = Files.readString(uptime).trim().split("\\s+")[0];
+            return (long) Double.parseDouble(firstValue);
+        } catch (IOException | NumberFormatException | ArrayIndexOutOfBoundsException e) {
+            return null;
+        }
     }
 }
