@@ -34,6 +34,7 @@ public class DeviceMetricService {
         metric.setMemoryTotalBytes(request.memoryTotalBytes());
         metric.setDiskUsedBytes(request.diskUsedBytes());
         metric.setDiskTotalBytes(request.diskTotalBytes());
+        metric.setUptimeSeconds(request.uptimeSeconds());
 
         return deviceMetricRepository.save(metric);
     }
@@ -49,7 +50,8 @@ public class DeviceMetricService {
                         metric.getMemoryUsedBytes(),
                         metric.getMemoryTotalBytes(),
                         metric.getDiskUsedBytes(),
-                        metric.getDiskTotalBytes()))
+                        metric.getDiskTotalBytes(),
+                        metric.getUptimeSeconds()))
                 .toList();
     }
 }
