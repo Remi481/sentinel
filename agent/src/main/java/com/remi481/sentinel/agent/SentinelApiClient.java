@@ -25,6 +25,14 @@ public class SentinelApiClient {
         return post("/api/v1/devices/register", request);
     }
 
+    public int sendMetrics(MetricsRequest request) throws IOException, InterruptedException {
+        return post("/api/v1/metrics", request);
+    }
+
+    public int sendHeartbeat(HeartbeatRequest request) throws IOException, InterruptedException {
+        return post("/api/v1/devices/heartbeat", request);
+    }
+
     private int post(String path, Object body) throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + path))
@@ -37,4 +45,3 @@ public class SentinelApiClient {
         return response.statusCode();
     }
 }
-
