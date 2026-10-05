@@ -1,6 +1,7 @@
 package com.remi481.sentinel.service;
 
 import com.remi481.sentinel.entity.Device;
+import com.remi481.sentinel.exception.DeviceNotFoundException;
 import com.remi481.sentinel.repository.DeviceRepository;
 import org.springframework.stereotype.Service;
 import java.time.Instant;
@@ -43,12 +44,12 @@ public class DeviceService {
 
                     return deviceRepository.save(device);
                 })
-                .orElseThrow(() -> new IllegalArgumentException("Device not found: " + uuid));
+                .orElseThrow(() -> new DeviceNotFoundException(uuid));
     }
 
     public Device getDevice(UUID uuid) {
         return deviceRepository.findByUuid(uuid)
-                .orElseThrow(() -> new IllegalArgumentException("Device not found: " + uuid));
+                .orElseThrow(() -> new DeviceNotFoundException(uuid));
     }
 
 
