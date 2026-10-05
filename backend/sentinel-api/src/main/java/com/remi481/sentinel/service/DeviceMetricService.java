@@ -1,12 +1,15 @@
 package com.remi481.sentinel.service;
 
 import com.remi481.sentinel.dto.MetricsRequest;
+import com.remi481.sentinel.dto.MetricsResponse;
 import com.remi481.sentinel.entity.Device;
 import com.remi481.sentinel.entity.DeviceMetric;
 import com.remi481.sentinel.repository.DeviceMetricRepository;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
 
 @Service
 public class DeviceMetricService {
@@ -33,5 +36,20 @@ public class DeviceMetricService {
         metric.setDiskTotalBytes(request.diskTotalBytes());
 
         return deviceMetricRepository.save(metric);
+    }
+
+    public List<MetricsResponse> getMetricsForDevice(UUID uuid) {
+        deviceService.getDevice(uuid);
+
+        return deviceMetricRepository.findTop100ByDeviceUuidOrderByRecordedAtDesc(uuid)
+                .stream()
+                .map(metric -> new MetricsResponse(
+                        metric.getRecordedAt(),
+                        metric.getCpuUsagePercent(),
+                        metric.getMemoryUsedBytes(),
+                        metric.getMemoryTotalBytes(),
+                        metric.getDiskUsedBytes(),
+                        metric.getDiskTotalBytes()))
+                .toList();
     }
 }
