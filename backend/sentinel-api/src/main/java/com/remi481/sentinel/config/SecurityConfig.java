@@ -16,6 +16,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/devices/heartbeat").permitAll()
                         .requestMatchers("/api/v1/devices/register").permitAll()
                         .requestMatchers("/api/v1/devices/**").permitAll()
+                        .requestMatchers("/api/v1/metrics").permitAll()
                         .anyRequest().authenticated()
                 );
 
