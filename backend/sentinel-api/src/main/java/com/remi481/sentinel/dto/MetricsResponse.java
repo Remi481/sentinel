@@ -9,6 +9,8 @@ public record MetricsResponse(
         Long memoryTotalBytes,
         Long diskUsedBytes,
         Long diskTotalBytes,
-        Long uptimeSeconds
+        Long uptimeSeconds,
+        Long networkReceivedBytesPerSecond,
+        Long networkSentBytesPerSecond
 ) {
 }
