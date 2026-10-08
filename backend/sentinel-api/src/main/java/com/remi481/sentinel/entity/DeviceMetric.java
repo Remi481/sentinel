@@ -42,4 +42,10 @@ public class DeviceMetric {
 
     @Column(name = "uptime_seconds")
     private Long uptimeSeconds;
+
+    @Column(name = "network_received_bytes_per_second")
+    private Long networkReceivedBytesPerSecond;
+
+    @Column(name = "network_sent_bytes_per_second")
+    private Long networkSentBytesPerSecond;
 }
