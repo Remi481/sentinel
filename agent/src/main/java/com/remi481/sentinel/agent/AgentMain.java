@@ -21,6 +21,12 @@ public class AgentMain {
         SentinelApiClient client = new SentinelApiClient(baseUrl);
         SystemMetricsCollector collector = new SystemMetricsCollector();
 
+        if (args.length > 0 && args[0].equals("--print")) {
+            Thread.sleep(1000);
+            System.out.println(collector.collect());
+            return;
+        }
+
         registerUntilSuccessful(client, deviceId, intervalSeconds);
 
         while (true) {
