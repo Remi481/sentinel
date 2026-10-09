@@ -98,8 +98,8 @@ Example request:
 }
 ```
 
-- `200 OK` — device updated; the full device JSON is returned.
-- `404 Not Found` — plain-text body `Device not found: {uuid}`.
+- `200 OK`: device updated; the full device JSON is returned.
+- `404 Not Found`: plain-text body `Device not found: {uuid}`.
 
 ### GET `/api/v1/devices`
 
@@ -126,8 +126,8 @@ Example response (200 OK):
 
 Fetches a single device.
 
-- `200 OK` — the device JSON.
-- `404 Not Found` — plain-text body `Device not found: {uuid}`.
+- `200 OK`: the device JSON.
+- `404 Not Found`: plain-text body `Device not found: {uuid}`.
 
 ## Metrics
 
@@ -149,8 +149,8 @@ The `MetricsRequest` JSON shape:
 
 Stores one metrics sample for a device.
 
-- `201 Created` — empty body on success.
-- `404 Not Found` — plain-text body `Device not found: {uuid}` when the device is unknown.
+- `201 Created`: empty body on success.
+- `404 Not Found`: plain-text body `Device not found: {uuid}` when the device is unknown.
 
 ### GET `/api/v1/devices/{uuid}/metrics`
 
@@ -188,7 +188,7 @@ Example response (200 OK):
 ]
 ```
 
-- `404 Not Found` — plain-text body `Device not found: {uuid}` when the device is unknown.
+- `404 Not Found`: plain-text body `Device not found: {uuid}` when the device is unknown.
 
 ## Error handling
 
