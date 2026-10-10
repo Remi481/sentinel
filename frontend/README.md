@@ -41,9 +41,16 @@ configuration anywhere.
 
 ## Endpoints used
 
+- `POST /api/v1/auth/login` – exchange username and password for a JWT
 - `GET /api/v1/devices` – the list of devices (polled every 10 seconds)
 - `GET /api/v1/devices/{uuid}/metrics` – the last 100 readings for a device
   (polled every 5 seconds while a device is open)
+- `POST /api/v1/devices/{uuid}/revoke-token` – revoke a device's token
+  (invoked from the device detail view)
+
+Every request after login sends `Authorization: Bearer <jwt>`. The token is kept
+in `sessionStorage` (so it is cleared when the tab closes) and in memory. A
+`401` response clears the token and returns to the login screen.
 
 Polling pauses automatically when the browser tab is hidden, and no request is
 started while a previous one is still in flight.
