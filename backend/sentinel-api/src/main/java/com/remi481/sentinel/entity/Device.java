@@ -1,5 +1,6 @@
 package com.remi481.sentinel.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -38,4 +39,8 @@ public class Device {
 
     @Column(name = "last_seen")
     private Instant lastSeen;
+
+    @Column(name = "token_hash", length = 64)
+    @JsonIgnore
+    private String tokenHash;
 }

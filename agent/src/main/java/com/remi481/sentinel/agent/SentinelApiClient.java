@@ -21,27 +21,65 @@ public class SentinelApiClient {
         this.baseUrl = baseUrl;
     }
 
-    public int register(RegisterRequest request) throws IOException, InterruptedException {
-        return post("/api/v1/devices/register", request);
+    public RegistrationResult register(RegisterRequest request, String bearerToken, String enrollmentKey)
+            throws IOException, InterruptedException {
+        HttpRequest.Builder builder = baseRequest("/api/v1/devices/register");
+        if (bearerToken != null) {
+            builder.header("Authorization", "Bearer " + bearerToken);
+        } else if (enrollmentKey != null) {
+            builder.header("X-Enrollment-Key", enrollmentKey);
+        }
+        HttpResponse<String> response = send(builder, request);
+
+        String deviceToken = null;
+        if (response.statusCode() >= 200 && response.statusCode() < 300) {
+            deviceToken = parseDeviceToken(response.body());
+        }
+        return new RegistrationResult(response.statusCode(), deviceToken);
     }
 
-    public int sendMetrics(MetricsRequest request) throws IOException, InterruptedException {
-        return post("/api/v1/metrics", request);
+    public int sendMetrics(MetricsRequest request, String bearerToken)
+            throws IOException, InterruptedException {
+        return send(authenticatedRequest("/api/v1/metrics", bearerToken), request).statusCode();
     }
 
-    public int sendHeartbeat(HeartbeatRequest request) throws IOException, InterruptedException {
-        return post("/api/v1/devices/heartbeat", request);
+    public int sendHeartbeat(HeartbeatRequest request, String bearerToken)
+            throws IOException, InterruptedException {
+        return send(authenticatedRequest("/api/v1/devices/heartbeat", bearerToken), request).statusCode();
     }
 
-    private int post(String path, Object body) throws IOException, InterruptedException {
-        HttpRequest request = HttpRequest.newBuilder()
+    private HttpRequest.Builder baseRequest(String path) {
+        return HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + path))
                 .timeout(Duration.ofSeconds(10))
-                .header("Content-Type", "application/json")
+                .header("Content-Type", "application/json");
+    }
+
+    private HttpRequest.Builder authenticatedRequest(String path, String bearerToken) {
+        HttpRequest.Builder builder = baseRequest(path);
+        if (bearerToken != null) {
+            builder.header("Authorization", "Bearer " + bearerToken);
+        }
+        return builder;
+    }
+
+    private HttpResponse<String> send(HttpRequest.Builder builder, Object body)
+            throws IOException, InterruptedException {
+        HttpRequest request = builder
                 .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(body)))
                 .build();
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
 
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        return response.statusCode();
+    private String parseDeviceToken(String body) {
+        try {
+            RegisterResponse parsed = mapper.readValue(body, RegisterResponse.class);
+            return parsed.deviceToken();
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    public record RegistrationResult(int status, String deviceToken) {
     }
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { DeviceNotFoundError, fetchMetrics } from '../api'
+import { DeviceNotFoundError, fetchMetrics, revokeDeviceToken } from '../api'
 import {
   formatBytes,
   formatPercent,
@@ -63,6 +63,26 @@ export default function DeviceDetail({ device, onBack }: DeviceDetailProps) {
   const [metrics, setMetrics] = useState<MetricReading[] | null>(null)
   const [notFound, setNotFound] = useState(false)
   const [error, setError] = useState(false)
+  const [revoking, setRevoking] = useState(false)
+  const [revoked, setRevoked] = useState(false)
+  const [revokeError, setRevokeError] = useState<string | null>(null)
+
+  async function onRevoke() {
+    const confirmed = window.confirm(
+      `Revoke the token for ${device.hostname}? The agent will stop reporting until it is re-enrolled.`,
+    )
+    if (!confirmed) return
+    setRevoking(true)
+    setRevokeError(null)
+    try {
+      await revokeDeviceToken(device.uuid)
+      setRevoked(true)
+    } catch {
+      setRevokeError('Could not revoke the device token')
+    } finally {
+      setRevoking(false)
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -189,6 +209,21 @@ export default function DeviceDetail({ device, onBack }: DeviceDetailProps) {
           <p className="mt-0.5 text-xs text-neutral-400 dark:text-neutral-500">
             Last seen {formatRelative(device.lastSeen)}
           </p>
+        </div>
+        <div className="text-right">
+          <button
+            type="button"
+            onClick={onRevoke}
+            disabled={revoking || revoked}
+            className="rounded-lg border border-rose-300 px-3 py-1.5 text-sm font-medium text-rose-600 transition-colors hover:bg-rose-50 disabled:opacity-60 dark:border-rose-800 dark:text-rose-400 dark:hover:bg-rose-950/40"
+          >
+            {revoked ? 'Token revoked' : revoking ? 'Revoking...' : 'Revoke device token'}
+          </button>
+          {revokeError ? (
+            <p role="alert" className="mt-1 text-xs text-rose-600 dark:text-rose-400">
+              {revokeError}
+            </p>
+          ) : null}
         </div>
       </div>
 

@@ -1,0 +1,26 @@
+package com.remi481.sentinel.controller;
+
+import com.remi481.sentinel.dto.LoginRequest;
+import com.remi481.sentinel.dto.LoginResponse;
+import com.remi481.sentinel.service.AuthService;
+import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/v1/auth")
+public class AuthController {
+
+    private final AuthService authService;
+
+    public AuthController(AuthService authService) {
+        this.authService = authService;
+    }
+
+    @PostMapping("/login")
+    public LoginResponse login(@Valid @RequestBody LoginRequest request) {
+        return authService.login(request.username(), request.password());
+    }
+}

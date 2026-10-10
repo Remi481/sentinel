@@ -1,19 +1,52 @@
 import { useEffect, useMemo, useState } from 'react'
 import { fetchDevices } from './api'
+import { clearToken, isLoggedIn, onSessionExpired } from './auth'
 import type { Device } from './types'
 import DeviceDetail from './components/DeviceDetail'
 import DeviceList from './components/DeviceList'
+import Login from './components/Login'
 
 const DEVICES_POLL_MS = 10000
 const NOW_TICK_MS = 30000
 
 function App() {
+  const [authed, setAuthed] = useState(() => isLoggedIn())
+  const [notice, setNotice] = useState<string | null>(null)
   const [devices, setDevices] = useState<Device[] | null>(null)
   const [error, setError] = useState(false)
   const [selected, setSelected] = useState<Device | null>(null)
   const [now, setNow] = useState(() => new Date())
 
+  useEffect(
+    () =>
+      onSessionExpired(() => {
+        setAuthed(false)
+        setNotice('Your session has expired. Please log in again.')
+        setDevices(null)
+        setError(false)
+        setSelected(null)
+      }),
+    [],
+  )
+
+  function onLoggedIn() {
+    setNotice(null)
+    setDevices(null)
+    setAuthed(true)
+  }
+
+  function onLogout() {
+    clearToken()
+    setNotice(null)
+    setDevices(null)
+    setError(false)
+    setSelected(null)
+    setAuthed(false)
+  }
+
   useEffect(() => {
+    if (!authed) return
+
     let cancelled = false
     let timeout: number | undefined
     let inFlight = false
@@ -54,7 +87,7 @@ function App() {
       document.removeEventListener('visibilitychange', onVisibility)
       window.clearTimeout(timeout)
     }
-  }, [])
+  }, [authed])
 
   useEffect(() => {
     let interval: number | undefined
@@ -93,14 +126,27 @@ function App() {
 
   const onlineCount = devices?.filter((d) => d.status === 'ONLINE').length ?? 0
 
+  if (!authed) {
+    return <Login onLoggedIn={onLoggedIn} notice={notice} />
+  }
+
   return (
     <div className="min-h-screen bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
       <header className="mx-auto w-full max-w-6xl px-4 pb-2 pt-8">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-xl font-bold tracking-tight">Sentinel</h1>
-          <p className="text-sm text-neutral-500 dark:text-neutral-400">
-            {onlineCount} of {devices?.length ?? 0} devices online
-          </p>
+          <div className="flex items-center gap-3">
+            <p className="text-sm text-neutral-500 dark:text-neutral-400">
+              {onlineCount} of {devices?.length ?? 0} devices online
+            </p>
+            <button
+              type="button"
+              onClick={onLogout}
+              className="rounded-lg border border-neutral-300 px-3 py-1 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+            >
+              Log out
+            </button>
+          </div>
         </div>
       </header>
 

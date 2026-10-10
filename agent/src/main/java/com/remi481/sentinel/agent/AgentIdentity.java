@@ -7,8 +7,7 @@ import java.util.UUID;
 
 public class AgentIdentity {
 
-    private static final Path ID_FILE =
-            Path.of(System.getProperty("user.home"), ".sentinel-agent", "agent-id");
+    private static final Path ID_FILE = DeviceTokenStore.defaultDirectory().resolve("agent-id");
 
     public static UUID loadOrCreate() throws IOException {
         if (Files.exists(ID_FILE)) {

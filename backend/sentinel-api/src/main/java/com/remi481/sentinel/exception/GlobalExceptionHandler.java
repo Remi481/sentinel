@@ -13,4 +13,16 @@ public class GlobalExceptionHandler {
     public String handleDeviceNotFoundException(DeviceNotFoundException exception) {
         return exception.getMessage();
     }
+
+    @ExceptionHandler(UnauthorizedException.class)
+    @ResponseStatus(HttpStatus.UNAUTHORIZED)
+    public String handleUnauthorizedException(UnauthorizedException exception) {
+        return exception.getMessage();
+    }
+
+    @ExceptionHandler(ForbiddenException.class)
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    public String handleForbiddenException(ForbiddenException exception) {
+        return exception.getMessage();
+    }
 }
