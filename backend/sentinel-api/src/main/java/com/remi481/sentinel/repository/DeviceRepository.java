@@ -12,6 +12,8 @@ import java.util.UUID;
 public interface DeviceRepository extends JpaRepository<Device, UUID> {
     Optional<Device> findByUuid(UUID uuid);
 
+    Optional<Device> findByTokenHash(String tokenHash);
+
     List<Device> findByStatusAndLastSeenBefore(DeviceStatus status, Instant cutoff);
 
     List<Device> findByStatusAndLastSeenIsNull(DeviceStatus status);
