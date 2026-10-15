@@ -7,10 +7,13 @@ real time.
 
 > **Status:** early development (`0.1.0`). Device registration, heartbeats,
 > metric collection, offline detection, the dashboard, and authentication
-> (dashboard JWT plus per-device agent tokens) are implemented and working.
-> Alerting and device audit history are planned but not built yet. See
-> [docs/api-spec.md](docs/api-spec.md) for exactly what the API supports today
-> and [docs/security.md](docs/security.md) for the authentication design.
+> (dashboard JWT plus per-device agent tokens) are implemented and working. The
+> stack deploys to a single Linux server with Docker Compose (see
+> [docs/deployment.md](docs/deployment.md)), and request validation and login
+> throttling are in place. Alerting and device audit history are planned but not
+> built yet. See [docs/api-spec.md](docs/api-spec.md) for exactly what the API
+> supports today and [docs/security.md](docs/security.md) for the authentication
+> design.
 
 ## How it fits together
 
@@ -40,9 +43,11 @@ flowchart LR
 | `agent/`                  | Standalone monitoring agent (Java, no framework)        |
 | `backend/sentinel-api/`   | Spring Boot REST API                                     |
 | `frontend/`               | React + TypeScript dashboard (Vite)                      |
+| `deploy/`                 | Production Docker Compose stack, Caddy config, and scripts |
 | `docs/`                   | API spec, domain model, and design drafts                |
 | `architecture/`           | Architecture decision records (ADRs)                     |
-| `docker/`                 | Docker Compose file and PostgreSQL init script          |
+| `docker/`                 | Local PostgreSQL Compose file and init script            |
+| `.github/`                | CI workflow                                              |
 
 ## Prerequisites
 
@@ -149,6 +154,24 @@ seconds and, while a device is open, its metrics every 5 seconds. The JWT is
 kept in `sessionStorage`, so it is cleared when the tab closes. See
 [frontend/README.md](frontend/README.md).
 
+## Deploy to a single server
+
+Sentinel ships with a production Docker Compose stack that runs on one Linux
+server with no cloud dependency: Caddy terminates HTTPS and serves the dashboard,
+the API and PostgreSQL stay on an internal network, and only Caddy publishes
+ports.
+
+```bash
+cd deploy
+./scripts/generate-secrets.sh   # create .env with strong random secrets
+$EDITOR .env                    # set SENTINEL_DOMAIN and SENTINEL_ADMIN_USERNAME
+docker compose up -d --build
+```
+
+See [docs/deployment.md](docs/deployment.md) for the full guide, including TLS,
+backups, updates, and running an agent. Everything is built and tested in CI on
+every push and pull request (`.github/workflows/ci.yml`).
+
 ## Tests
 
 ```bash
@@ -166,6 +189,7 @@ cd frontend && npm test && npm run lint
 
 - [docs/api-spec.md](docs/api-spec.md) — the implemented HTTP API, verified
 - [docs/security.md](docs/security.md): authentication, tokens, and threat model
+- [docs/deployment.md](docs/deployment.md) — deploying the stack to a server
 - [docs/domain-model.md](docs/domain-model.md) — entities and relationships
 - [docs/product-vision.md](docs/product-vision.md) — product goals
 - [docs/system-architecture.md](docs/system-architecture.md) — design draft

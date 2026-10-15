@@ -76,26 +76,36 @@ Example response (200 OK):
 ```
 
 - `401 Unauthorized`: username or password is wrong.
-- `400 Bad Request`: `username` or `password` is missing or blank. Both fields
-  are required (`@NotBlank`).
+- `400 Bad Request`: `username` or `password` is missing, blank, or longer than
+  200 characters.
+- `429 Too Many Requests`: too many failed attempts. The response has a
+  `Retry-After` header (seconds) and a plain-text body
+  `Too many failed login attempts. Try again later.`. See
+  [security.md](security.md#login-throttling).
 
 ## Health
 
 ### GET `/api/v1/health`
 
-Returns static service information.
+Checks that the API can reach its database. Used by the container healthcheck
+and by load balancers.
 
-Example response (200):
+Example response (200 OK), database reachable:
 
 ```json
 {
-  "status": "UP",
-  "service": "Sentinel API",
-  "version": "0.1.0"
+  "status": "UP"
 }
 ```
 
-- `status`: always `UP` at present; the endpoint is a static check and does not reflect database connectivity.
+- `503 Service Unavailable` when the database cannot be reached:
+
+```json
+{
+  "status": "DOWN"
+}
+```
+
 
 ## Devices
 
@@ -104,11 +114,11 @@ The `Device` JSON shape is:
 | Field | Type | Notes |
 | --- | --- | --- |
 | `uuid` | string (UUID) | Client-generated; primary key. Required. |
-| `hostname` | string | nullable |
-| `operatingSystem` | string | nullable |
-| `architecture` | string | nullable |
-| `ipAddress` | string | nullable |
-| `agentVersion` | string | nullable |
+| `hostname` | string | Required, non-blank, at most 255 characters. |
+| `operatingSystem` | string | nullable, at most 255 characters |
+| `architecture` | string | nullable, at most 255 characters |
+| `ipAddress` | string | nullable, at most 255 characters |
+| `agentVersion` | string | nullable, at most 255 characters |
 | `status` | enum `ONLINE` / `OFFLINE` / `UNKNOWN` | Ignored on input; see below. |
 | `lastSeen` | instant | Ignored on input; see below. |
 
@@ -165,6 +175,8 @@ On an update (device token supplied) the response is the same shape with
 - `401 Unauthorized`: first registration without a valid `X-Enrollment-Key`, or
   an update with a missing/invalid device token.
 - `403 Forbidden`: the device token does not belong to the submitted `uuid`.
+- `400 Bad Request`: the body fails validation (missing `uuid` or `hostname`, or
+  a field longer than 255 characters). The body is `{"error": "<field> <reason>"}`.
 
 ### POST `/api/v1/devices/heartbeat`
 
@@ -181,6 +193,8 @@ Example request:
 - `200 OK` — device updated; the full device JSON is returned.
 - `401 Unauthorized`: the device token is missing, unknown, or revoked.
 - `403 Forbidden`: the device token belongs to a different device.
+- `400 Bad Request`: the body is missing `uuid`. The body is
+  `{"error": "uuid must not be null"}`.
 
 ### GET `/api/v1/devices`
 
@@ -217,14 +231,14 @@ The `MetricsRequest` JSON shape:
 | Field | Type | Notes |
 | --- | --- | --- |
 | `uuid` | string (UUID) | Device uuid. Required. |
-| `cpuUsagePercent` | number | nullable |
-| `memoryUsedBytes` | integer | nullable |
-| `memoryTotalBytes` | integer | nullable |
-| `diskUsedBytes` | integer | nullable |
-| `diskTotalBytes` | integer | nullable |
-| `uptimeSeconds` | integer | nullable |
-| `networkReceivedBytesPerSecond` | integer | nullable |
-| `networkSentBytesPerSecond` | integer | nullable |
+| `cpuUsagePercent` | number | nullable, between 0 and 100 |
+| `memoryUsedBytes` | integer | nullable, zero or greater |
+| `memoryTotalBytes` | integer | nullable, zero or greater |
+| `diskUsedBytes` | integer | nullable, zero or greater |
+| `diskTotalBytes` | integer | nullable, zero or greater |
+| `uptimeSeconds` | integer | nullable, zero or greater |
+| `networkReceivedBytesPerSecond` | integer | nullable, zero or greater |
+| `networkSentBytesPerSecond` | integer | nullable, zero or greater |
 
 ### POST `/api/v1/metrics`
 
@@ -233,6 +247,9 @@ Stores one metrics sample for a device. Requires a device token (`Authorization:
 - `201 Created` — empty body on success.
 - `401 Unauthorized`: missing, unknown, or revoked device token.
 - `403 Forbidden`: the device token does not belong to the submitted `uuid`.
+- `400 Bad Request`: the body fails validation (missing `uuid`, `cpuUsagePercent`
+  outside 0 to 100, or a byte/rate/uptime value below zero). The body is
+  `{"error": "<field> <reason>"}`.
 
 ### GET `/api/v1/devices/{uuid}/metrics`
 
@@ -300,9 +317,13 @@ After revocation the agent's next call returns `401`. Delete the agent's
   with a plain-text body `Device not found: {uuid}`. Because agent endpoints
   authenticate before touching the device, an unknown or revoked token there
   yields `401` rather than `404`.
-- Malformed login bodies produce `400 Bad Request` (see [Login](#login)).
-  Other malformed JSON or internal errors are not customized yet and use
-  Spring's default behavior.
+- Request bodies are validated before authentication. A body that fails
+  validation produces `400 Bad Request` with `{"error": "<field> <reason>"}`; a
+  body that is not valid JSON produces `400 Bad Request` with
+  `{"error": "The request body is not valid JSON"}`. Because validation runs
+  first, a malformed body is rejected with `400` even without a valid token.
+- Repeated failed logins produce `429 Too Many Requests` with a `Retry-After`
+  header (see [Login](#login)).
 
 ## Offline detection
 
@@ -315,8 +336,10 @@ The agent is expected to call `register` or `heartbeat` at a shorter interval (d
 
 ## Known gaps
 
-- Request bodies other than login are not validated with `jakarta.validation`.
 - There is no pagination; the metrics history is fixed at 100 samples.
+- Login throttling is held in memory, so it is per API instance and resets on
+  restart. A single-server deployment has one instance, so this is sufficient
+  there.
 
 ## Not built yet
 
