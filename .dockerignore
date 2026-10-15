@@ -1,0 +1,10 @@
+**/node_modules
+**/node_modules.win-bak
+**/dist
+**/target
+.git
+.idea
+.vscode
+*.log
+deploy/.env
+deploy/backups
