@@ -168,6 +168,16 @@ $EDITOR .env                    # set SENTINEL_DOMAIN and SENTINEL_ADMIN_USERNAM
 docker compose up -d --build
 ```
 
+On Windows, no WSL is needed. In PowerShell:
+
+```powershell
+cd deploy
+Copy-Item .env.example .env
+.\scripts\generate-secrets.ps1  # prints secrets to paste into .env; writes no file
+notepad .env                    # paste the secrets, set SENTINEL_DOMAIN and SENTINEL_ADMIN_USERNAME
+docker compose up -d --build
+```
+
 See [docs/deployment.md](docs/deployment.md) for the full guide, including TLS,
 backups, updates, and running an agent. Everything is built and tested in CI on
 every push and pull request (`.github/workflows/ci.yml`).

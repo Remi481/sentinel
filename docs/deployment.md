@@ -35,6 +35,8 @@ origin, so there is no CORS configuration.
 
 ## Quick start
 
+Linux/macOS (bash):
+
 ```bash
 git clone <repository-url> sentinel
 cd sentinel/deploy
@@ -47,6 +49,31 @@ $EDITOR .env
 
 docker compose up -d --build
 ```
+
+Windows (PowerShell, no WSL needed):
+
+```powershell
+git clone <repository-url> sentinel
+cd sentinel\deploy
+
+# Print strong random secrets and paste them into .env.
+Copy-Item .env.example .env
+.\scripts\generate-secrets.ps1
+
+# Open .env and paste the printed lines, then set SENTINEL_DOMAIN and
+# SENTINEL_ADMIN_USERNAME.
+notepad .env
+
+docker compose up -d --build
+```
+
+`generate-secrets.ps1` only prints the values; it never writes a file. Save them
+in a password manager, because the enrolment key is needed again every time you
+enrol a new agent.
+
+On Linux/macOS, `generate-secrets.sh` writes the values into `deploy/.env` for
+you (it never overwrites values you have already set, so it is safe to re-run).
+On Windows, copy the printed lines into `.env` yourself.
 
 Then open your domain in a browser and log in with
 `SENTINEL_ADMIN_USERNAME` and `SENTINEL_ADMIN_PASSWORD`. The admin account is
@@ -67,7 +94,7 @@ value is too weak, so misconfiguration surfaces immediately.
 
 | Variable | Required | Notes |
 | --- | --- | --- |
-| `SENTINEL_DOMAIN` | yes | DNS name Caddy serves. Use `http://localhost` to run without TLS. |
+| `SENTINEL_DOMAIN` | yes | DNS name Caddy serves. Use `localhost` for a local trial; Caddy then uses its internal CA. |
 | `SENTINEL_DB_PASSWORD` | yes | Password for the bundled PostgreSQL. |
 | `SENTINEL_JWT_SECRET` | yes | Dashboard JWT signing key, at least 32 bytes. |
 | `SENTINEL_ENROLLMENT_KEY` | yes | Shared agent enrolment key, at least 24 characters. |
@@ -92,6 +119,11 @@ reason:
 ```bash
 docker compose logs web
 ```
+
+For a local trial, set `SENTINEL_DOMAIN=localhost`. Caddy then issues a
+certificate from its own internal CA and serves `https://localhost`. Browsers do
+not trust that CA, so use `curl -k` or accept the warning; this mode is for
+testing, not for production.
 
 ## Running an agent
 
