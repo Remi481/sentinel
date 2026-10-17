@@ -96,34 +96,6 @@ public class LoginThrottleService {
         // The reservation recorded by reserve() stays as a failure.
     }
 
-    public void checkAllowed(String username, String clientIp) {
-        Instant now = Instant.now(clock);
-        synchronized (this) {
-            long usernameRetry = retryAfterSeconds(usernameFailures, username, maxUsernameFailures, now);
-            long ipRetry = retryAfterSeconds(ipFailures, clientIp, maxIpFailures, now);
-            long retryAfter = Math.max(usernameRetry, ipRetry);
-            if (retryAfter > 0) {
-                throw new TooManyRequestsException(retryAfter);
-            }
-        }
-    }
-
-    public void recordFailure(String username, String clientIp) {
-        Instant now = Instant.now(clock);
-        synchronized (this) {
-            addFailure(usernameFailures, username, now, maxUsernameFailures);
-            addFailure(ipFailures, clientIp, now, maxIpFailures);
-        }
-    }
-
-    public void recordSuccess(String username) {
-        synchronized (this) {
-            if (username != null) {
-                usernameFailures.remove(username);
-            }
-        }
-    }
-
     int usernameEntryCount() {
         synchronized (this) {
             return usernameFailures.size();
@@ -179,6 +151,11 @@ public class LoginThrottleService {
     }
 
     private void evictIfFull(Map<String, Deque<Instant>> failures, int maxAttempts) {
+        // Only pay for the full sweep once the map has actually grown past its
+        // bound; the common path just prunes the one deque it touched.
+        if (failures.size() <= maxEntries) {
+            return;
+        }
         Instant now = Instant.now(clock);
         Iterator<Map.Entry<String, Deque<Instant>>> entryIterator = failures.entrySet().iterator();
         while (entryIterator.hasNext()) {

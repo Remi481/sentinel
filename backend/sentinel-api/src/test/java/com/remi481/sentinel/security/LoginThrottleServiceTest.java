@@ -26,69 +26,71 @@ class LoginThrottleServiceTest {
     @Test
     void blocksUsernameAfterFiveFailures() {
         for (int attempt = 0; attempt < MAX_USERNAME_ATTEMPTS; attempt++) {
-            service.recordFailure("alice", "10.0.0.1");
+            service.reserve("alice", "10.0.0.1");
         }
-        assertThrows(TooManyRequestsException.class, () -> service.checkAllowed("alice", "10.0.0.2"));
+        assertThrows(TooManyRequestsException.class, () -> service.reserve("alice", "10.0.0.2"));
     }
 
     @Test
     void anotherUsernameFromTheSameIpIsNotAffectedByUsernameLimit() {
         for (int attempt = 0; attempt < MAX_USERNAME_ATTEMPTS; attempt++) {
-            service.recordFailure("alice", "10.0.0.1");
+            service.reserve("alice", "10.0.0.1");
         }
-        assertDoesNotThrow(() -> service.checkAllowed("bob", "10.0.0.1"));
+        assertDoesNotThrow(() -> service.reserve("bob", "10.0.0.1"));
     }
 
     @Test
     void blocksIpAfterTwentyFailuresAcrossUsernames() {
         for (int attempt = 0; attempt < MAX_IP_ATTEMPTS; attempt++) {
-            service.recordFailure("user-" + attempt, "10.0.0.9");
+            service.reserve("user-" + attempt, "10.0.0.9");
         }
-        assertThrows(TooManyRequestsException.class, () -> service.checkAllowed("another-user", "10.0.0.9"));
+        assertThrows(TooManyRequestsException.class, () -> service.reserve("another-user", "10.0.0.9"));
     }
 
     @Test
-    void successResetsUsernameCounterButNotIpCounter() {
-        for (int attempt = 0; attempt < MAX_USERNAME_ATTEMPTS; attempt++) {
-            service.recordFailure("alice", "10.0.0.1");
+    void successResetsUsernameCounterAndRefundsItsOwnIpReservation() {
+        for (int attempt = 0; attempt < MAX_USERNAME_ATTEMPTS - 1; attempt++) {
+            service.reserve("alice", "10.0.0.1");
         }
-        assertThrows(TooManyRequestsException.class, () -> service.checkAllowed("alice", "10.0.0.1"));
+        LoginThrottleService.Reservation reservation = service.reserve("alice", "10.0.0.1");
+        service.releaseSuccess(reservation);
 
-        service.recordSuccess("alice");
-
-        assertDoesNotThrow(() -> service.checkAllowed("alice", "10.0.0.1"));
+        assertDoesNotThrow(() -> service.reserve("alice", "10.0.0.1"));
     }
 
     @Test
-    void successDoesNotResetIpCounter() {
-        for (int attempt = 0; attempt < MAX_IP_ATTEMPTS; attempt++) {
-            service.recordFailure("user-" + attempt, "10.0.0.9");
+    void unrelatedSuccessDoesNotResetTheIpCounter() {
+        for (int attempt = 0; attempt < MAX_IP_ATTEMPTS - 1; attempt++) {
+            service.reserve("user-" + attempt, "10.0.0.9");
         }
-        service.recordSuccess("user-0");
-        assertThrows(TooManyRequestsException.class, () -> service.checkAllowed("fresh-user", "10.0.0.9"));
+        LoginThrottleService.Reservation winner = service.reserve("winner", "10.0.0.9");
+        service.releaseSuccess(winner);
+        service.reserve("extra", "10.0.0.9");
+
+        assertThrows(TooManyRequestsException.class, () -> service.reserve("another-user", "10.0.0.9"));
     }
 
     @Test
     void blockExpiresAfterTheWindow() {
         for (int attempt = 0; attempt < MAX_USERNAME_ATTEMPTS; attempt++) {
-            service.recordFailure("alice", "10.0.0.1");
+            service.reserve("alice", "10.0.0.1");
         }
-        assertThrows(TooManyRequestsException.class, () -> service.checkAllowed("alice", "10.0.0.1"));
+        assertThrows(TooManyRequestsException.class, () -> service.reserve("alice", "10.0.0.1"));
 
         clock.advance(Duration.ofMinutes(WINDOW_MINUTES).plusSeconds(1));
 
-        assertDoesNotThrow(() -> service.checkAllowed("alice", "10.0.0.1"));
+        assertDoesNotThrow(() -> service.reserve("alice", "10.0.0.1"));
     }
 
     @Test
     void retryAfterIsPositiveAndWithinTheWindow() {
         for (int attempt = 0; attempt < MAX_USERNAME_ATTEMPTS; attempt++) {
-            service.recordFailure("alice", "10.0.0.1");
+            service.reserve("alice", "10.0.0.1");
             clock.advance(Duration.ofSeconds(1));
         }
 
         TooManyRequestsException exception =
-                assertThrows(TooManyRequestsException.class, () -> service.checkAllowed("alice", "10.0.0.2"));
+                assertThrows(TooManyRequestsException.class, () -> service.reserve("alice", "10.0.0.2"));
         assertTrue(exception.getRetryAfterSeconds() > 0);
         assertTrue(exception.getRetryAfterSeconds() <= Duration.ofMinutes(WINDOW_MINUTES).toSeconds());
         assertEquals(TooManyRequestsException.MESSAGE, exception.getMessage());
@@ -99,7 +101,7 @@ class LoginThrottleServiceTest {
         LoginThrottleService bounded = new LoginThrottleService(
                 WINDOW_MINUTES, MAX_USERNAME_ATTEMPTS, MAX_IP_ATTEMPTS, 3, clock);
         for (int attempt = 0; attempt < 50; attempt++) {
-            bounded.recordFailure("user-" + attempt, "ip-" + attempt);
+            bounded.reserve("user-" + attempt, "ip-" + attempt);
         }
         assertTrue(bounded.usernameEntryCount() <= 3);
         assertTrue(bounded.ipEntryCount() <= 3);
@@ -110,12 +112,12 @@ class LoginThrottleServiceTest {
         LoginThrottleService bounded = new LoginThrottleService(
                 WINDOW_MINUTES, MAX_USERNAME_ATTEMPTS, MAX_IP_ATTEMPTS, 10000, clock);
         for (int attempt = 0; attempt < MAX_USERNAME_ATTEMPTS; attempt++) {
-            bounded.recordFailure("blocked-user", "10.0.0.5");
+            bounded.reserve("blocked-user", "10.0.0.5");
         }
         for (int attempt = 0; attempt < 10001; attempt++) {
-            bounded.recordFailure("flood-" + attempt, "ip-" + attempt);
+            bounded.reserve("flood-" + attempt, "ip-" + attempt);
         }
-        assertThrows(TooManyRequestsException.class, () -> bounded.checkAllowed("blocked-user", "10.0.0.6"));
+        assertThrows(TooManyRequestsException.class, () -> bounded.reserve("blocked-user", "10.0.0.6"));
     }
 
     @Test

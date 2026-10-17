@@ -115,6 +115,19 @@ API instance and resets on restart; the single-server deployment in
 Because the check runs before the password is verified, a correct password is
 also rejected once the limit is hit.
 
+Two limits remain worth knowing about:
+
+- The bounded map protects memory, but it is not perfectly fair. A flood from
+  roughly 500 or more distinct addresses can grow the map enough that eviction
+  removes a username that has fewer than five failures, so a determined attacker
+  who controls many addresses can knock a victim's counter back to zero and
+  extend a brute-force attempt. Treat the lockout as a speed bump, not a hard
+  guarantee.
+- IP limits are counted per exact address. A client that can present a whole
+  IPv6 range, or that can move between addresses, gets a fresh budget per
+  address, so the twenty-failure limit does not stop an attacker who rotates
+  addresses.
+
 ## Agent authentication
 
 Agents do not use JWTs. Each device gets its own opaque random token.
