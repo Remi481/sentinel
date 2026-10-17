@@ -25,9 +25,19 @@
 
 	handle /api/* {
 		reverse_proxy api:8080 {
-			# Replace any client-supplied X-Forwarded-For with the real
-			# peer address, so forged values cannot spoof the throttle's IP.
+			# The API trusts the proxy (server.forward-headers-strategy=framework),
+			# so it derives the client IP from the X-Forwarded-For / Forwarded
+			# headers. Caddy is the only ingress, so drop every client-supplied
+			# forwarding header and set X-Forwarded-For to the real peer address.
+			# Without this a client could forge Forwarded, X-Forwarded-For or
+			# X-Real-IP and get a fresh throttle key on every request.
+			header_up -Forwarded
+			header_up -X-Real-IP
+			header_up -X-Forwarded-Host
+			header_up -X-Forwarded-Proto
+			header_up -X-Forwarded-Port
 			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
 		}
 	}
 
