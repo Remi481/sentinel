@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   backend:
     name: Backend (Spring Boot)
@@ -62,3 +66,13 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
+
+  containers:
+    name: Container images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build API image
+        run: docker build -t sentinel-api:ci backend/sentinel-api
+      - name: Build dashboard image
+        run: docker build -f deploy/web.Dockerfile -t sentinel-web:ci .
