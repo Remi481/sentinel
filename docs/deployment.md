@@ -202,3 +202,25 @@ docker compose exec db pg_isready -U sentinel
   and that port `80` is reachable.
 - **Agent stays `OFFLINE`.** Confirm the agent can reach `SENTINEL_API_URL` and
   that `SENTINEL_ENROLLMENT_KEY` matches the API's value.
+- **The API container shows exit code `143` after a stop or restart.** This is
+  normal. On `docker compose stop api`, `docker compose up -d`, or a rebuild,
+  Docker sends `SIGTERM`; the API finishes in-flight requests (waiting up to
+  `stop_grace_period`, 30 seconds) and exits with `143` (128 + `SIGTERM`). Exit
+  code `137` (128 + `SIGKILL`) is the failure case: the grace period ran out and
+  Docker killed the process, usually because a request or the database was stuck.
+  Check `docker compose logs api` and raise `stop_grace_period` only if you have a
+  genuinely long request.
+- **Changing `SENTINEL_DB_PASSWORD` breaks the login.** PostgreSQL only reads that
+  password when it first initialises its data volume. Editing it in `.env` later
+  leaves the old password inside the volume, so the API can no longer connect. For
+  a trial, recreate the volume: `docker compose down -v`, then
+  `docker compose up -d --build`. For a database with real data, change the
+  password inside PostgreSQL instead and update `.env` to match.
+- **A `.env` value is empty or has the wrong text.** Compose expands `$` in `.env`
+  values, so a single `$` (common in generated passwords) is treated as a variable
+  reference. Write `$$` to get a literal `$`, or avoid `$` in the value.
+- **The admin account is not recreated or the password did not change.** Sentinel
+  creates the admin only on the first start, when the `users` table is empty.
+  Editing `SENTINEL_ADMIN_USERNAME` or `SENTINEL_ADMIN_PASSWORD` in `.env`
+  afterwards does nothing to an existing account. Change the password in the app,
+  or, to start over with no data, run `docker compose down -v`.

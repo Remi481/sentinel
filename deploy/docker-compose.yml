@@ -39,6 +39,10 @@ services:
     build:
       context: ../backend/sentinel-api
     restart: unless-stopped
+    # The API uses server.shutdown=graceful with a 20s phase timeout, so give
+    # it longer than the 10s default to finish in-flight requests before Docker
+    # would send SIGKILL (which shows up as exit code 137).
+    stop_grace_period: 30s
     environment:
       SPRING_PROFILES_ACTIVE: prod
       SENTINEL_DB_URL: jdbc:postgresql://db:5432/sentinel
