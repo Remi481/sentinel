@@ -56,16 +56,26 @@ Windows (PowerShell, no WSL needed):
 git clone <repository-url> sentinel
 cd sentinel\deploy
 
-# Print strong random secrets and paste them into .env.
+# 1. Create .env from the template.
 Copy-Item .env.example .env
-.\scripts\generate-secrets.ps1
 
-# Open .env and paste the printed lines, then set SENTINEL_DOMAIN and
-# SENTINEL_ADMIN_USERNAME.
+# 2. Print four strong random secrets. This does not write them for you.
+powershell -ExecutionPolicy Bypass -File .\scripts\generate-secrets.ps1
+
+# 3. Open .env, replace the placeholders with the printed values, then set
+#    SENTINEL_DOMAIN (use localhost to try it locally) and
+#    SENTINEL_ADMIN_USERNAME.
 notepad .env
 
+# 4. Start the stack.
 docker compose up -d --build
 ```
+
+In `.env` every line is `NAME=value`, with no spaces around the `=` and no quotes
+around the value. Paste the printed `SENTINEL_DB_PASSWORD`, `SENTINEL_JWT_SECRET`,
+`SENTINEL_ENROLLMENT_KEY` and `SENTINEL_ADMIN_PASSWORD`, and set `SENTINEL_DOMAIN`
+and `SENTINEL_ADMIN_USERNAME`. The `-ExecutionPolicy Bypass` flag is only needed
+if your execution policy blocks the script.
 
 `generate-secrets.ps1` only prints the values; it never writes a file. Save them
 in a password manager, because the enrolment key is needed again every time you
@@ -149,6 +159,39 @@ volume so the container does not re-enrol on restart:
 docker compose --profile agent up -d --build
 ```
 
+For a local trial (`SENTINEL_DOMAIN=localhost`) run the agent in a container as
+above rather than with `mvn exec:java`. Caddy serves `https://localhost` with its
+own internal CA, which the JVM does not trust, so a host agent's TLS handshake
+fails. The container agent talks to the API over the Compose network and is not
+affected.
+
+## Verify the deployment
+
+`scripts/check-forged-headers.sh` (and its PowerShell twin
+`scripts/check-forged-headers.ps1`) is a regression check for the login throttle.
+Caddy is the only ingress and the API trusts the proxy, so it derives the client
+IP from the `X-Forwarded-For` / `Forwarded` headers. The check sends 25 wrong
+logins, each with a different forged forwarding header, and requires the
+per-address limit to stop the flood. If a forged header changed the throttle key
+the check fails, so run it after `docker compose up -d`:
+
+```bash
+# Linux/macOS, or Git Bash/WSL on Windows
+deploy/scripts/check-forged-headers.sh
+SENTINEL_BASE_URL=https://your-domain deploy/scripts/check-forged-headers.sh
+```
+
+```powershell
+# Windows PowerShell
+cd deploy
+.\scripts\check-forged-headers.ps1
+.\scripts\check-forged-headers.ps1 -BaseUrl https://your-domain
+```
+
+The shell script reads `SENTINEL_BASE_URL`, `SENTINEL_LIMIT`, `SENTINEL_REQUESTS`
+and `SENTINEL_INSECURE` from the environment; the PowerShell script takes the
+equivalent `-BaseUrl`, `-Limit` and `-Requests` parameters.
+
 ## Backups and restore
 
 `scripts/backup.sh` runs `pg_dump` in the database container and writes a gzipped
@@ -193,6 +236,12 @@ docker compose ps                 # container and health status
 docker compose exec db pg_isready -U sentinel
 ```
 
+- **`required variable SENTINEL_... is missing a value`.** Compose could not read
+  a variable while it built the stack, which means `deploy/.env` is missing or one
+  of the required values is empty. The message names the variable, for example
+  `required variable SENTINEL_DB_PASSWORD is missing a value: set
+  SENTINEL_DB_PASSWORD in .env`. Create `.env` from `.env.example`, fill in every
+  referenced value, and run the command again from the `deploy/` directory.
 - **API container is unhealthy.** The healthcheck calls `/api/v1/health`, which
   returns `503` when the database is unreachable. Check `docker compose logs api`
   and confirm the database is up.
