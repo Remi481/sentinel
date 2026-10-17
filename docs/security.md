@@ -92,7 +92,7 @@ Failed logins are rate limited in memory to blunt brute-force and password
 spraying:
 
 - five failed attempts for the same username within 15 minutes lock that
-  username out,
+  username out for 15 minutes; this also locks out the real owner,
 - twenty failed attempts from the same client IP within 15 minutes lock that IP
   out (this catches spraying across many usernames),
 - a locked-out request returns `429 Too Many Requests` with a `Retry-After`
@@ -102,9 +102,12 @@ spraying:
   the IP counter is never cleared by a success, so one valid login does not
   reset an attacker's budget.
 
-The counters live in a bounded, least-recently-used map (10,000 entries by
-default) so a flood of distinct usernames or IPs cannot grow memory without
-limit. The limits and window are configurable through
+The counters live in a bounded map (10,000 entries by default) so a flood of
+distinct usernames or IPs cannot grow memory without limit. When the map is
+full, expired entries are dropped first, then the least recently updated entry
+that is not currently over its limit is evicted; a currently blocked entry is
+only evicted when every entry is blocked, in which case the one that expires
+soonest goes first. The limits and window are configurable through
 `sentinel.security.throttle.*` (see `application.properties`). Throttling is per
 API instance and resets on restart; the single-server deployment in
 [deployment.md](deployment.md) runs one instance.

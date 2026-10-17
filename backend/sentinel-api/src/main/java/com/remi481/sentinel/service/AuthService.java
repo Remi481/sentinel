@@ -32,26 +32,32 @@ public class AuthService {
     }
 
     public LoginResponse login(String username, String password, String clientIp) {
-        loginThrottleService.checkAllowed(username, clientIp);
+        LoginThrottleService.Reservation reservation = loginThrottleService.reserve(username, clientIp);
+        boolean success = false;
+        try {
+            AppUser user = userRepository.findByUsername(username).orElse(null);
 
-        AppUser user = userRepository.findByUsername(username).orElse(null);
+            boolean validCredentials;
+            if (user == null) {
+                passwordEncoder.matches(password, dummyHash);
+                validCredentials = false;
+            } else {
+                validCredentials = passwordEncoder.matches(password, user.getPasswordHash());
+            }
 
-        boolean validCredentials;
-        if (user == null) {
-            passwordEncoder.matches(password, dummyHash);
-            validCredentials = false;
-        } else {
-            validCredentials = passwordEncoder.matches(password, user.getPasswordHash());
+            if (!validCredentials) {
+                throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
+            }
+
+            String token = jwtTokenService.createToken(user);
+            success = true;
+            return new LoginResponse(token, jwtTokenService.expiresInSeconds());
+        } finally {
+            if (success) {
+                loginThrottleService.releaseSuccess(reservation);
+            } else {
+                loginThrottleService.releaseFailure(reservation);
+            }
         }
-
-        if (!validCredentials) {
-            loginThrottleService.recordFailure(username, clientIp);
-            throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
-        }
-
-        loginThrottleService.recordSuccess(username);
-
-        String token = jwtTokenService.createToken(user);
-        return new LoginResponse(token, jwtTokenService.expiresInSeconds());
     }
 }

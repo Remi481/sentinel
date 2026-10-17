@@ -25,6 +25,30 @@ public class LoginThrottleService {
     private final Map<String, Deque<Instant>> usernameFailures = new LinkedHashMap<>();
     private final Map<String, Deque<Instant>> ipFailures = new LinkedHashMap<>();
 
+    public static class Reservation {
+        private final String username;
+        private final String clientIp;
+        private final Instant reservedAt;
+
+        private Reservation(String username, String clientIp, Instant reservedAt) {
+            this.username = username;
+            this.clientIp = clientIp;
+            this.reservedAt = reservedAt;
+        }
+
+        public String getUsername() {
+            return username;
+        }
+
+        public String getClientIp() {
+            return clientIp;
+        }
+
+        public Instant getReservedAt() {
+            return reservedAt;
+        }
+    }
+
     public LoginThrottleService(
             @Value("${sentinel.security.throttle.window-minutes:15}") long windowMinutes,
             @Value("${sentinel.security.throttle.max-username-attempts:5}") int maxUsernameFailures,
@@ -36,6 +60,40 @@ public class LoginThrottleService {
         this.maxIpFailures = maxIpFailures;
         this.maxEntries = maxEntries;
         this.clock = clock;
+    }
+
+    public Reservation reserve(String username, String clientIp) {
+        Instant now = Instant.now(clock);
+        synchronized (this) {
+            long usernameRetry = retryAfterSeconds(usernameFailures, username, maxUsernameFailures, now);
+            long ipRetry = retryAfterSeconds(ipFailures, clientIp, maxIpFailures, now);
+            long retryAfter = Math.max(usernameRetry, ipRetry);
+            if (retryAfter > 0) {
+                throw new TooManyRequestsException(retryAfter);
+            }
+            Reservation reservation = new Reservation(username, clientIp, now);
+            addFailure(usernameFailures, username, now, maxUsernameFailures);
+            addFailure(ipFailures, clientIp, now, maxIpFailures);
+            return reservation;
+        }
+    }
+
+    public void releaseSuccess(Reservation reservation) {
+        if (reservation == null) {
+            return;
+        }
+        synchronized (this) {
+            if (reservation.username != null) {
+                usernameFailures.remove(reservation.username);
+            }
+            if (reservation.clientIp != null && reservation.reservedAt != null) {
+                removeSingleReservation(ipFailures, reservation.clientIp, reservation.reservedAt);
+            }
+        }
+    }
+
+    public void releaseFailure(Reservation reservation) {
+        // The reservation recorded by reserve() stays as a failure.
     }
 
     public void checkAllowed(String username, String clientIp) {
@@ -53,14 +111,16 @@ public class LoginThrottleService {
     public void recordFailure(String username, String clientIp) {
         Instant now = Instant.now(clock);
         synchronized (this) {
-            addFailure(usernameFailures, username, now);
-            addFailure(ipFailures, clientIp, now);
+            addFailure(usernameFailures, username, now, maxUsernameFailures);
+            addFailure(ipFailures, clientIp, now, maxIpFailures);
         }
     }
 
     public void recordSuccess(String username) {
         synchronized (this) {
-            usernameFailures.remove(username);
+            if (username != null) {
+                usernameFailures.remove(username);
+            }
         }
     }
 
@@ -101,14 +161,14 @@ public class LoginThrottleService {
         return Math.max(1, seconds);
     }
 
-    private void addFailure(Map<String, Deque<Instant>> failures, String key, Instant now) {
+    private void addFailure(Map<String, Deque<Instant>> failures, String key, Instant now, int maxAttempts) {
         if (key == null) {
             return;
         }
         Deque<Instant> timestamps = failures.computeIfAbsent(key, ignored -> new ArrayDeque<>());
         timestamps.addLast(now);
         prune(timestamps, now);
-        evictOldestIfFull(failures);
+        evictIfFull(failures, maxAttempts);
     }
 
     private void prune(Deque<Instant> timestamps, Instant now) {
@@ -118,14 +178,105 @@ public class LoginThrottleService {
         }
     }
 
-    private void evictOldestIfFull(Map<String, Deque<Instant>> failures) {
+    private void evictIfFull(Map<String, Deque<Instant>> failures, int maxAttempts) {
+        Instant now = Instant.now(clock);
+        Iterator<Map.Entry<String, Deque<Instant>>> entryIterator = failures.entrySet().iterator();
+        while (entryIterator.hasNext()) {
+            Map.Entry<String, Deque<Instant>> entry = entryIterator.next();
+            Deque<Instant> deque = entry.getValue();
+            if (deque == null) {
+                entryIterator.remove();
+                continue;
+            }
+            prune(deque, now);
+            if (deque.isEmpty()) {
+                entryIterator.remove();
+            }
+        }
         while (failures.size() > maxEntries) {
+            evictOne(failures, maxAttempts, now);
+        }
+    }
+
+    private void evictOne(Map<String, Deque<Instant>> failures, int maxAttempts, Instant now) {
+        Map.Entry<String, Deque<Instant>> leastRecentlyUpdatedUnblocked = null;
+        Map.Entry<String, Deque<Instant>> blockedExpiringSoonest = null;
+        Instant soonestExpiry = null;
+        for (Map.Entry<String, Deque<Instant>> entry : failures.entrySet()) {
+            Deque<Instant> deque = entry.getValue();
+            if (deque == null || deque.isEmpty()) {
+                continue;
+            }
+            if (deque.size() >= maxAttempts) {
+                Instant blocking = blockingExpiry(deque, maxAttempts);
+                if (blockedExpiringSoonest == null || blocking.isBefore(soonestExpiry)) {
+                    blockedExpiringSoonest = entry;
+                    soonestExpiry = blocking;
+                }
+                continue;
+            }
+            Instant last = deque.peekLast();
+            if (leastRecentlyUpdatedUnblocked == null) {
+                leastRecentlyUpdatedUnblocked = entry;
+                continue;
+            }
+            Instant bestLast = leastRecentlyUpdatedUnblocked.getValue().peekLast();
+            if (last != null && (bestLast == null || last.isBefore(bestLast))) {
+                leastRecentlyUpdatedUnblocked = entry;
+            }
+        }
+        Map.Entry<String, Deque<Instant>> victim =
+                leastRecentlyUpdatedUnblocked != null ? leastRecentlyUpdatedUnblocked : blockedExpiringSoonest;
+        if (victim == null) {
             Iterator<String> keys = failures.keySet().iterator();
             if (!keys.hasNext()) {
                 return;
             }
             keys.next();
             keys.remove();
+            return;
+        }
+        failures.remove(victim.getKey());
+    }
+
+    private Instant blockingExpiry(Deque<Instant> timestamps, int maxAttempts) {
+        int removeCount = timestamps.size() - maxAttempts + 1;
+        if (removeCount <= 0) {
+            return Instant.MAX;
+        }
+        Instant blockingTimestamp = null;
+        Iterator<Instant> iterator = timestamps.iterator();
+        for (int i = 0; i < removeCount && iterator.hasNext(); i++) {
+            blockingTimestamp = iterator.next();
+        }
+        if (blockingTimestamp == null) {
+            return Instant.MAX;
+        }
+        return blockingTimestamp.plus(window);
+    }
+
+    private void removeSingleReservation(Map<String, Deque<Instant>> failures, String key, Instant reservedAt) {
+        if (key == null || reservedAt == null) {
+            return;
+        }
+        Deque<Instant> timestamps = failures.get(key);
+        if (timestamps == null || timestamps.isEmpty()) {
+            return;
+        }
+        boolean removed = timestamps.removeLastOccurrence(reservedAt);
+        if (!removed) {
+            Iterator<Instant> iterator = timestamps.descendingIterator();
+            while (iterator.hasNext()) {
+                Instant candidate = iterator.next();
+                if (candidate != null && candidate.equals(reservedAt)) {
+                    iterator.remove();
+                    removed = true;
+                    break;
+                }
+            }
+        }
+        if (timestamps.isEmpty()) {
+            failures.remove(key);
         }
     }
 }

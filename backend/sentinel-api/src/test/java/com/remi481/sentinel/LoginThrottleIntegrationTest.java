@@ -13,6 +13,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -86,6 +87,32 @@ class LoginThrottleIntegrationTest {
                 })
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"username\":\"" + username + "\",\"password\":\"" + password + "\"}"));
+    }
+
+    @Test
+    void concurrencyFiftyThreadsForOneUsernameGivesExactlyFiveTo401Rest429() throws Exception {
+        ensureUser("concurrent-user", "correct-pass");
+        java.util.concurrent.CyclicBarrier barrier = new java.util.concurrent.CyclicBarrier(50);
+        java.util.concurrent.atomic.AtomicInteger unauthorized = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.atomic.AtomicInteger tooMany = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(50);
+        for (int i = 0; i < 50; i++) {
+            final int idx = i;
+            pool.submit(() -> {
+                try {
+                    barrier.await();
+                    var res = attemptLogin("concurrent-user", "wrong-" + idx, "198.51.100.200").andReturn();
+                    int status = res.getResponse().getStatus();
+                    if (status == 401) unauthorized.incrementAndGet();
+                    if (status == 429) tooMany.incrementAndGet();
+                } catch (Exception e) {
+                }
+            });
+        }
+        pool.shutdown();
+        pool.awaitTermination(120, java.util.concurrent.TimeUnit.SECONDS);
+        assertEquals(5, unauthorized.get());
+        assertEquals(45, tooMany.get());
     }
 
     private void ensureUser(String username, String password) {

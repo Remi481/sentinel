@@ -105,6 +105,32 @@ class LoginThrottleServiceTest {
         assertTrue(bounded.ipEntryCount() <= 3);
     }
 
+    @Test
+    void floodingDistinctUsernamesCannotEvictCurrentlyBlockedUsername() {
+        LoginThrottleService bounded = new LoginThrottleService(
+                WINDOW_MINUTES, MAX_USERNAME_ATTEMPTS, MAX_IP_ATTEMPTS, 10000, clock);
+        for (int attempt = 0; attempt < MAX_USERNAME_ATTEMPTS; attempt++) {
+            bounded.recordFailure("blocked-user", "10.0.0.5");
+        }
+        for (int attempt = 0; attempt < 10001; attempt++) {
+            bounded.recordFailure("flood-" + attempt, "ip-" + attempt);
+        }
+        assertThrows(TooManyRequestsException.class, () -> bounded.checkAllowed("blocked-user", "10.0.0.6"));
+    }
+
+    @Test
+    void successfulLoginRefundsOnlyOwnIpReservation() {
+        MutableClock c = new MutableClock();
+        LoginThrottleService svc = new LoginThrottleService(WINDOW_MINUTES, MAX_USERNAME_ATTEMPTS, MAX_IP_ATTEMPTS, 10000, c);
+        LoginThrottleService.Reservation res1 = svc.reserve("alice", "10.0.0.1");
+        svc.releaseSuccess(res1);
+        LoginThrottleService.Reservation res2 = svc.reserve("bob", "10.0.0.1");
+        LoginThrottleService.Reservation res3 = svc.reserve("carol", "10.0.0.1");
+        svc.releaseFailure(res3);
+        LoginThrottleService.Reservation res4 = svc.reserve("dave", "10.0.0.1");
+        assertDoesNotThrow(() -> svc.releaseSuccess(res4));
+    }
+
     private static final class MutableClock extends Clock {
 
         private Instant now = Instant.parse("2026-01-01T00:00:00Z");
