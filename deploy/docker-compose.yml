@@ -23,6 +23,15 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - sentinel
 
@@ -42,6 +51,25 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 40s
+      retries: 3
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 768m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - sentinel
 
@@ -59,7 +87,24 @@ services:
       - caddy-data:/data
       - caddy-config:/config
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+    sysctls:
+      # Let the unprivileged Caddy process bind the low ports 80 and 443.
+      net.ipv4.ip_unprivileged_port_start: 0
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - sentinel
 
@@ -77,7 +122,17 @@ services:
     volumes:
       - agent-data:/home/sentinel/.sentinel-agent
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - sentinel
 
