@@ -11,10 +11,17 @@
 {$SENTINEL_DOMAIN:localhost} {
 	encode zstd gzip
 
+	# Send HSTS only for real public hostnames, never for localhost or
+	# 127.0.0.1 where a browser would pin HTTPS on a loopback origin. Raise
+	# max-age only after the site has been confirmed working over HTTPS (for
+	# example to 31536000), and add includeSubDomains only once every subdomain
+	# is HTTPS too.
+	@public not host localhost 127.0.0.1
+	header @public Strict-Transport-Security "max-age=86400"
+
 	# Security headers for every response. These replace (not append to) any
 	# value an upstream sends, so API responses do not get duplicate headers.
 	header {
-		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "DENY"
 		Referrer-Policy "no-referrer"
@@ -24,6 +31,10 @@
 	}
 
 	handle /api/* {
+		# Reject oversized request bodies before they reach the API.
+		request_body {
+			max_size 1MB
+		}
 		reverse_proxy api:8080 {
 			# The API trusts the proxy (server.forward-headers-strategy=framework),
 			# so it derives the client IP from the X-Forwarded-For / Forwarded
