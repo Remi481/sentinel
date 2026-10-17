@@ -16,6 +16,7 @@ jobs:
   backend:
     name: Backend (Spring Boot)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: backend/sentinel-api
@@ -32,6 +33,7 @@ jobs:
   agent:
     name: Agent
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: agent
@@ -48,6 +50,7 @@ jobs:
   frontend:
     name: Frontend (dashboard)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: frontend
@@ -70,6 +73,7 @@ jobs:
   containers:
     name: Container images
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - name: Build API image
