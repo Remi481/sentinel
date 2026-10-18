@@ -42,11 +42,19 @@ The monitoring agent is written in Java so it can run on both Windows and Linux 
 
 ---
 
-## Cloud
+## Deployment
 
-### Amazon Web Services (AWS)
+### Single Linux server
 
-AWS will host the backend services and database while providing a scalable cloud environment.
+Sentinel deploys to one Linux server with no cloud dependency. Docker Compose
+runs the API, PostgreSQL, and a reverse proxy on the same host, and a DNS name
+plus open ports 80 and 443 are all that is required.
+
+### Caddy
+
+Caddy terminates TLS with automatically obtained and renewed certificates, serves
+the built dashboard, and reverse-proxies `/api/*` to the API. It is the only
+service that publishes ports.
 
 ---
 
@@ -54,7 +62,8 @@ AWS will host the backend services and database while providing a scalable cloud
 
 ### Docker
 
-Docker will package the backend and supporting services for consistent deployments.
+Docker packages the API, agent, and dashboard as images, and Docker Compose wires
+them together with PostgreSQL for consistent, repeatable deployments.
 
 ---
 

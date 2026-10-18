@@ -26,8 +26,12 @@ npm run dev
 
 The dev server starts on `http://localhost:5173`. In development the app calls
 relative `/api/...` URLs and Vite proxies them to the Sentinel API
-(`http://localhost:8080`, configured in `vite.config.ts`), so there is no CORS
-configuration anywhere.
+(`http://localhost:8080` by default), so there is no CORS configuration
+anywhere. Point the proxy at a different API with `VITE_API_PROXY_TARGET`:
+
+```bash
+VITE_API_PROXY_TARGET=http://192.168.1.50:8080 npm run dev
+```
 
 ## Scripts
 

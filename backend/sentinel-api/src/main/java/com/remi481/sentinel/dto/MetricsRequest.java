@@ -1,16 +1,21 @@
 package com.remi481.sentinel.dto;
 
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.PositiveOrZero;
+
 import java.util.UUID;
 
 public record MetricsRequest(
-        UUID uuid,
-        Double cpuUsagePercent,
-        Long memoryUsedBytes,
-        Long memoryTotalBytes,
-        Long diskUsedBytes,
-        Long diskTotalBytes,
-        Long uptimeSeconds,
-        Long networkReceivedBytesPerSecond,
-        Long networkSentBytesPerSecond
+        @NotNull UUID uuid,
+        @DecimalMin("0.0") @DecimalMax("100.0") Double cpuUsagePercent,
+        @PositiveOrZero Long memoryUsedBytes,
+        @PositiveOrZero Long memoryTotalBytes,
+        @PositiveOrZero Long diskUsedBytes,
+        @PositiveOrZero Long diskTotalBytes,
+        @PositiveOrZero Long uptimeSeconds,
+        @PositiveOrZero Long networkReceivedBytesPerSecond,
+        @PositiveOrZero Long networkSentBytesPerSecond
 ) {
 }

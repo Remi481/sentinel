@@ -3,6 +3,7 @@ package com.remi481.sentinel.controller;
 import com.remi481.sentinel.dto.LoginRequest;
 import com.remi481.sentinel.dto.LoginResponse;
 import com.remi481.sentinel.service.AuthService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -20,7 +21,7 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public LoginResponse login(@Valid @RequestBody LoginRequest request) {
-        return authService.login(request.username(), request.password());
+    public LoginResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest servletRequest) {
+        return authService.login(request.username(), request.password(), servletRequest.getRemoteAddr());
     }
 }

@@ -1,0 +1,60 @@
+# Caddy serves the built dashboard and reverse-proxies the API.
+#
+# Set SENTINEL_DOMAIN to a real DNS name (for example sentinel.example.com) that
+# points at this server; Caddy obtains a TLS certificate automatically. For a
+# local trial, set SENTINEL_DOMAIN=localhost (no scheme); Caddy uses its internal
+# CA and https://localhost works with a self-signed certificate.
+#
+# Caddy runs as an unprivileged user, so binding ports 80 and 443 relies on the
+# web service setting net.ipv4.ip_unprivileged_port_start=0 (see
+# docker-compose.yml).
+{$SENTINEL_DOMAIN:localhost} {
+	encode zstd gzip
+
+	# Send HSTS only for real public hostnames, never for localhost or
+	# 127.0.0.1 where a browser would pin HTTPS on a loopback origin. Raise
+	# max-age only after the site has been confirmed working over HTTPS (for
+	# example to 31536000), and add includeSubDomains only once every subdomain
+	# is HTTPS too.
+	@public not host localhost 127.0.0.1
+	header @public Strict-Transport-Security "max-age=86400"
+
+	# Security headers for every response. These replace (not append to) any
+	# value an upstream sends, so API responses do not get duplicate headers.
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		-Server
+	}
+
+	handle /api/* {
+		# Reject oversized request bodies before they reach the API.
+		request_body {
+			max_size 1MB
+		}
+		reverse_proxy api:8080 {
+			# The API trusts the proxy (server.forward-headers-strategy=framework),
+			# so it derives the client IP from the X-Forwarded-For / Forwarded
+			# headers. Caddy is the only ingress, so drop every client-supplied
+			# forwarding header and set X-Forwarded-For to the real peer address.
+			# Without this a client could forge Forwarded, X-Forwarded-For or
+			# X-Real-IP and get a fresh throttle key on every request.
+			header_up -Forwarded
+			header_up -X-Real-IP
+			header_up -X-Forwarded-Host
+			header_up -X-Forwarded-Proto
+			header_up -X-Forwarded-Port
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

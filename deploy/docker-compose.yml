@@ -1,0 +1,150 @@
+# Production stack for a single Linux server.
+#
+#   cd deploy
+#   cp .env.example .env      # then fill in the values, or run scripts/generate-secrets.sh
+#   docker compose up -d --build
+#
+# Only the web (Caddy) service publishes ports. The API and database stay on the
+# internal network and are reachable only through Caddy.
+name: sentinel
+
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sentinel
+      POSTGRES_USER: sentinel
+      POSTGRES_PASSWORD: ${SENTINEL_DB_PASSWORD:?set SENTINEL_DB_PASSWORD in .env}
+    volumes:
+      - sentinel-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentinel -d sentinel"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - sentinel
+
+  api:
+    build:
+      context: ../backend/sentinel-api
+    restart: unless-stopped
+    # The API uses server.shutdown=graceful with a 20s phase timeout, so give
+    # it longer than the 10s default to finish in-flight requests before Docker
+    # would send SIGKILL (which shows up as exit code 137).
+    stop_grace_period: 30s
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SENTINEL_DB_URL: jdbc:postgresql://db:5432/sentinel
+      SENTINEL_DB_USER: sentinel
+      SENTINEL_DB_PASSWORD: ${SENTINEL_DB_PASSWORD:?set SENTINEL_DB_PASSWORD in .env}
+      SENTINEL_JWT_SECRET: ${SENTINEL_JWT_SECRET:?set SENTINEL_JWT_SECRET in .env}
+      SENTINEL_ENROLLMENT_KEY: ${SENTINEL_ENROLLMENT_KEY:?set SENTINEL_ENROLLMENT_KEY in .env}
+      SENTINEL_ADMIN_USERNAME: ${SENTINEL_ADMIN_USERNAME:-}
+      SENTINEL_ADMIN_PASSWORD: ${SENTINEL_ADMIN_PASSWORD:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 40s
+      retries: 3
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 768m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - sentinel
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+    restart: unless-stopped
+    environment:
+      SENTINEL_DOMAIN: ${SENTINEL_DOMAIN:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    sysctls:
+      # Let the unprivileged Caddy process bind the low ports 80 and 443.
+      net.ipv4.ip_unprivileged_port_start: 0
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - sentinel
+
+  # Optional: run an agent in a container. Start with:
+  #   docker compose --profile agent up -d
+  agent:
+    profiles: ["agent"]
+    build:
+      context: ../agent
+    restart: unless-stopped
+    environment:
+      SENTINEL_API_URL: http://api:8080
+      SENTINEL_INTERVAL_SECONDS: ${SENTINEL_INTERVAL_SECONDS:-30}
+      SENTINEL_ENROLLMENT_KEY: ${SENTINEL_ENROLLMENT_KEY:?set SENTINEL_ENROLLMENT_KEY in .env}
+    volumes:
+      - agent-data:/home/sentinel/.sentinel-agent
+    depends_on:
+      api:
+        condition: service_healthy
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - sentinel
+
+volumes:
+  sentinel-db-data:
+  caddy-data:
+  caddy-config:
+  agent-data:
+
+networks:
+  sentinel:

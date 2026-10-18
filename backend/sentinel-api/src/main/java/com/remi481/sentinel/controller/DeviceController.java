@@ -7,6 +7,7 @@ import com.remi481.sentinel.exception.ForbiddenException;
 import com.remi481.sentinel.security.AgentAuthService;
 import com.remi481.sentinel.service.DeviceAuthService;
 import com.remi481.sentinel.service.DeviceService;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -30,7 +31,7 @@ public class DeviceController {
     }
 
     @PostMapping("/register")
-    public DeviceRegistration registerDevice(@RequestBody Device device,
+    public DeviceRegistration registerDevice(@Valid @RequestBody Device device,
                                              @RequestHeader(value = "X-Enrollment-Key", required = false) String enrollmentKey,
                                              @RequestHeader(value = "Authorization", required = false) String authorization) {
         boolean alreadyEnrolled = deviceAuthService.findByUuid(device.getUuid())
@@ -48,7 +49,7 @@ public class DeviceController {
     }
 
     @PostMapping("/heartbeat")
-    public ResponseEntity<Device> heartbeat(@RequestBody HeartbeatRequest request,
+    public ResponseEntity<Device> heartbeat(@Valid @RequestBody HeartbeatRequest request,
                                             @RequestHeader(value = "Authorization", required = false) String authorization) {
         Device authenticated = agentAuthService.authenticateDeviceToken(authorization);
         requireOwnDevice(authenticated, request.uuid());

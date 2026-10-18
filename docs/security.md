@@ -23,9 +23,25 @@ they are missing or too weak.
 | `SENTINEL_ENROLLMENT_KEY` | yes | Shared secret that a new agent presents once to enrol. At least 24 characters. |
 | `SENTINEL_ADMIN_USERNAME` | together | Bootstrap admin username. Provide together with the password, or leave both unset. |
 | `SENTINEL_ADMIN_PASSWORD` | together | Bootstrap admin password. At least 12 characters. |
+| `SENTINEL_DB_PASSWORD` | prod only | Database password. Required when the `prod` profile is active, and must not be the insecure default `sentinel`. |
 
 `SENTINEL_JWT_TTL_SECONDS` is an extra convenience setting added by this
 implementation; it is not part of the original requirements.
+
+### Startup validation
+
+Startup checks all of the above at once and refuses to start if anything is
+missing or too weak. It reports every problem in a single message (naming the
+variables, never their values), so a misconfigured server fails immediately
+rather than running with a weak secret. The checked conditions are:
+
+- `SENTINEL_JWT_SECRET` is at least 32 bytes,
+- `SENTINEL_ENROLLMENT_KEY` is at least 24 characters,
+- `SENTINEL_ADMIN_USERNAME` and `SENTINEL_ADMIN_PASSWORD` are set together, and
+  the password is at least 12 characters,
+- with the `prod` profile active, `SENTINEL_DB_PASSWORD` is set and is not
+  `sentinel`.
+
 
 ### Admin bootstrap
 
@@ -69,6 +85,48 @@ code ever runs. `JwtOnlyBearerTokenResolver` only hands a token to the JWT
 decoder when it has the three-part `header.payload.signature` shape; everything
 else is left to the agent authentication path. This keeps a single
 `SecurityFilterChain` for both credential types.
+
+## Login throttling
+
+Failed logins are rate limited in memory to blunt brute-force and password
+spraying:
+
+- five failed attempts for the same username within 15 minutes lock that
+  username out for 15 minutes; this also locks out the real owner,
+- twenty failed attempts from the same client IP within 15 minutes lock that IP
+  out (this catches spraying across many usernames),
+- a locked-out request returns `429 Too Many Requests` with a `Retry-After`
+  header in seconds and the body
+  `Too many failed login attempts. Try again later.`,
+- a successful login clears the failed-attempt counter for that username only;
+  the IP counter is never cleared by a success, so one valid login does not
+  reset an attacker's budget.
+
+The counters live in a bounded map (10,000 entries by default) so a flood of
+distinct usernames or IPs cannot grow memory without limit. When the map is
+full, expired entries are dropped first, then the least recently updated entry
+that is not currently over its limit is evicted; a currently blocked entry is
+only evicted when every entry is blocked, in which case the one that expires
+soonest goes first. The limits and window are configurable through
+`sentinel.security.throttle.*` (see `application.properties`). Throttling is per
+API instance and resets on restart; the single-server deployment in
+[deployment.md](deployment.md) runs one instance.
+
+Because the check runs before the password is verified, a correct password is
+also rejected once the limit is hit.
+
+Two limits remain worth knowing about:
+
+- The bounded map protects memory, but it is not perfectly fair. A flood from
+  roughly 500 or more distinct addresses can grow the map enough that eviction
+  removes a username that has fewer than five failures, so a determined attacker
+  who controls many addresses can knock a victim's counter back to zero and
+  extend a brute-force attempt. Treat the lockout as a speed bump, not a hard
+  guarantee.
+- IP limits are counted per exact address. A client that can present a whole
+  IPv6 range, or that can move between addresses, gets a fresh budget per
+  address, so the twenty-failure limit does not stop an attacker who rotates
+  addresses.
 
 ## Agent authentication
 
@@ -134,21 +192,30 @@ and a non-zero exit.
 and integration tests assert that neither the raw token nor the hash appears in
 device or metrics responses.
 
+`devices.token_hash` has a unique index, so two devices can never share a token
+hash. The column is nullable (a device whose token was revoked has no hash), and
+both PostgreSQL and H2 allow any number of `NULL` values in a unique column, so a
+device can be revoked and later re-enrol without a conflict. A repository test
+asserts both properties.
+
 ## What is not covered yet
 
-- **Transport security.** Run the API behind TLS in any real deployment; tokens
-  and JWTs are otherwise sent in clear text.
+- **TLS in the application.** The API speaks plain HTTP; the deployment in
+  [deployment.md](deployment.md) puts Caddy in front of it, which terminates
+  HTTPS with an automatically obtained certificate and is the only service that
+  publishes ports.
 - **Token rotation.** Device tokens do not expire on their own; rotate them with
   revoke plus re-enrol.
 - **Multiple users and roles.** Only the single `ADMIN` role exists, and there
   is no user management API.
 - **Refresh tokens.** A JWT simply expires after its TTL and the user logs in
   again.
-- **Rate limiting and lockout.** There is no brute-force protection on login.
+- **Distributed throttling.** Login throttling is per API instance; there is no
+  shared store, so it does not coordinate across replicas.
 - **Audit log.** Revocations and logins are not recorded.
 
 ## Reporting
 
-This is an educational project. Do not deploy it as-is on an untrusted network.
-For a real deployment, add TLS, secret management, rate limiting, and an audit
-trail.
+This is an educational project. The bundled deployment adds TLS, private
+networking, secret handling, and login throttling, but a hardened production
+deployment should also add an audit trail and a secret manager.
