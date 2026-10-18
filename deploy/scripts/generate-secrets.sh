@@ -8,7 +8,9 @@
 #                                      overwrite values that are already real
 #
 # --write never prints the values it generates; it prompts for the admin password
-# on hidden input and writes deploy/.env with LF line endings.
+# on hidden input and writes deploy/.env with LF line endings. If SENTINEL_DOMAIN
+# is empty or still the example placeholder, it is set to localhost so a local
+# trial works without editing the file.
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -17,6 +19,8 @@ env_file="$deploy_dir/.env"
 example_file="$deploy_dir/.env.example"
 placeholder="REPLACE_WITH_GENERATED_VALUE"
 legacy_placeholder="change-me"
+domain_placeholder="sentinel.example.com"
+local_domain="localhost"
 min_password_length=12
 secret_keys=(SENTINEL_DB_PASSWORD SENTINEL_JWT_SECRET SENTINEL_ENROLLMENT_KEY)
 target_keys=(SENTINEL_DB_PASSWORD SENTINEL_JWT_SECRET SENTINEL_ENROLLMENT_KEY SENTINEL_ADMIN_PASSWORD)
@@ -70,7 +74,7 @@ if [ "$write_mode" -eq 0 ]; then
     echo "SENTINEL_ADMIN_PASSWORD=$(random_secret)"
     echo
     echo 'Also set in deploy/.env:'
-    echo '  SENTINEL_DOMAIN          the DNS name this server answers on (use localhost to try it locally)'
+    echo '  SENTINEL_DOMAIN          localhost for a local trial; set your DNS name on a real server'
     echo '  SENTINEL_ADMIN_USERNAME  the bootstrap admin username'
     echo
     echo 'Save every printed value in a password manager now. They are not stored anywhere by this script.'
@@ -130,6 +134,16 @@ is_real_value() {
     [ "$value" != "$legacy_placeholder" ] || return 1
     return 0
 }
+
+# An empty or placeholder domain is set to localhost so a local trial works
+# without editing the file. A real DNS name is left alone.
+domain_set=0
+domain_value="$(get_value SENTINEL_DOMAIN)"
+if [ -z "$domain_value" ] || [ "$domain_value" = "$domain_placeholder" ]; then
+    set_value SENTINEL_DOMAIN "$local_domain"
+    domain_set=1
+    echo 'SENTINEL_DOMAIN was empty or a placeholder, set it to localhost for a local trial.'
+fi
 
 already_set=()
 for key in "${target_keys[@]}"; do
@@ -199,10 +213,15 @@ if [ "$username_kept" -eq 1 ]; then
 else
     echo '  SENTINEL_ADMIN_USERNAME                                             set to admin'
 fi
-echo '  SENTINEL_DOMAIN                                                     left unchanged'
+if [ "$domain_set" -eq 0 ]; then
+    echo '  SENTINEL_DOMAIN                                                     kept as it is'
+fi
 echo
-echo 'Next: set SENTINEL_DOMAIN in the file if needed, then run:'
+echo 'Next: run'
 echo "  cd \"$deploy_dir\" && docker compose up -d --build"
+echo
+echo 'Then open https://localhost (not 127.0.0.1 or an IP, which the certificate'
+echo 'does not cover). On a real server, set SENTINEL_DOMAIN to its DNS name first.'
 echo
 echo 'WARNING: PostgreSQL only reads SENTINEL_DB_PASSWORD when the database volume is'
 echo 'first created. Changing it later leaves the old password inside the volume and'

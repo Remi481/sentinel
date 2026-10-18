@@ -12,9 +12,10 @@ With -Write the script creates deploy\.env from .env.example if it does not
 exist, replaces the SENTINEL_DB_PASSWORD, SENTINEL_JWT_SECRET and
 SENTINEL_ENROLLMENT_KEY lines in place with fresh random values without showing
 them, and asks for the bootstrap admin password on a hidden prompt (at least 12
-characters). SENTINEL_DOMAIN is left alone and SENTINEL_ADMIN_USERNAME is set to
-admin unless it already has a value. Values that are already real are not
-overwritten unless -Force is given. The file is written with LF line endings.
+characters). An empty or placeholder SENTINEL_DOMAIN is set to localhost for a
+local trial, and SENTINEL_ADMIN_USERNAME is set to admin unless it already has a
+value. Values that are already real are not overwritten unless -Force is given.
+The file is written with LF line endings.
 
 .PARAMETER Write
 Create or update deploy\.env instead of printing the values.
@@ -41,6 +42,8 @@ $ErrorActionPreference = 'Stop'
 
 $Placeholder = 'REPLACE_WITH_GENERATED_VALUE'
 $LegacyPlaceholder = 'change-me'
+$DomainPlaceholder = 'sentinel.example.com'
+$LocalDomain = 'localhost'
 $SecretKeys = @(
     'SENTINEL_DB_PASSWORD',
     'SENTINEL_JWT_SECRET',
@@ -161,7 +164,7 @@ if (-not $Write) {
 
     Write-Host ''
     Write-Host 'Also set in deploy\.env:'
-    Write-Host '  SENTINEL_DOMAIN          the DNS name this server answers on (use localhost to try it locally)'
+    Write-Host '  SENTINEL_DOMAIN          localhost for a local trial; set your DNS name on a real server'
     Write-Host '  SENTINEL_ADMIN_USERNAME  the bootstrap admin username'
     Write-Host ''
     Write-Host 'Save every printed value in a password manager now. They are not stored anywhere by this script.'
@@ -184,6 +187,21 @@ if (-not (Test-Path $envPath)) {
 }
 
 $entries = Get-EnvEntries -Path $envPath
+
+# An empty or placeholder domain is set to localhost so a local trial works
+# without editing the file. A real DNS name is left alone.
+$currentDomain = ''
+if ($entries.Contains('SENTINEL_DOMAIN')) {
+    $currentDomain = [string]$entries['SENTINEL_DOMAIN']
+}
+$domainSet = [string]::IsNullOrWhiteSpace($currentDomain) -or $currentDomain -eq $DomainPlaceholder
+if ($domainSet) {
+    $domainLines = New-Object 'System.Collections.Generic.List[string]'
+    $domainLines.AddRange([string[]][System.IO.File]::ReadAllLines($envPath))
+    Set-EnvEntry -Lines $domainLines -Key 'SENTINEL_DOMAIN' -Value $LocalDomain
+    Write-EnvFile -Path $envPath -Lines $domainLines
+    Write-Host 'SENTINEL_DOMAIN was empty or a placeholder, set it to localhost for a local trial.'
+}
 
 $alreadySet = @()
 foreach ($key in $TargetKeys) {
@@ -236,10 +254,15 @@ if ($usernameSet) {
 else {
     Write-Host '  SENTINEL_ADMIN_USERNAME                                             set to admin'
 }
-Write-Host '  SENTINEL_DOMAIN                                                     left unchanged'
+if (-not $domainSet) {
+    Write-Host '  SENTINEL_DOMAIN                                                     kept as it is'
+}
 Write-Host ''
-Write-Host 'Next: set SENTINEL_DOMAIN in the file if needed, then run:'
+Write-Host 'Next: run'
 Write-Host '  docker compose up -d --build'
+Write-Host ''
+Write-Host 'Then open https://localhost (not 127.0.0.1 or an IP, which the certificate does not cover).'
+Write-Host 'On a real server, set SENTINEL_DOMAIN to its DNS name first.'
 Write-Host ''
 Write-Host 'WARNING: PostgreSQL only reads SENTINEL_DB_PASSWORD when the database volume is'
 Write-Host 'first created. Changing it later leaves the old password inside the volume and'
