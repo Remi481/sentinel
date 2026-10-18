@@ -163,8 +163,8 @@ ports.
 
 ```bash
 cd deploy
-./scripts/generate-secrets.sh   # create .env with strong random secrets
-$EDITOR .env                    # set SENTINEL_DOMAIN and SENTINEL_ADMIN_USERNAME
+./scripts/generate-secrets.sh --write   # create .env from .env.example with fresh random secrets
+$EDITOR .env                            # set SENTINEL_DOMAIN (the admin user defaults to admin)
 docker compose up -d --build
 ```
 
@@ -172,11 +172,19 @@ On Windows, no WSL is needed. In PowerShell:
 
 ```powershell
 cd deploy
-Copy-Item .env.example .env
-.\scripts\generate-secrets.ps1  # prints secrets to paste into .env; writes no file
-notepad .env                    # paste the secrets, set SENTINEL_DOMAIN and SENTINEL_ADMIN_USERNAME
+.\scripts\generate-secrets.ps1 -Write   # create .env with fresh random secrets, hidden admin password prompt
+notepad .env                            # set SENTINEL_DOMAIN (the admin user defaults to admin)
 docker compose up -d --build
 ```
+
+Neither write mode prints the values it writes, and neither overwrites values
+that are already real unless you also pass `--force` (`-Force`). To paste the
+values in yourself, run the same script without `--write` or `-Write`: the
+print-only mode shows one `NAME=value` line per secret and writes no file.
+
+If the api container keeps restarting, run `docker compose logs api --tail 30`; the first 'Sentinel cannot start' line names the variable that is wrong. If you left placeholder values in deploy/.env, the API will not start.
+
+PostgreSQL only reads `SENTINEL_DB_PASSWORD` when the database volume is first created, so changing it later in `.env` does not change the password inside an existing volume.
 
 See [docs/deployment.md](docs/deployment.md) for the full guide, including TLS,
 backups, updates, and running an agent. Everything is built and tested in CI on

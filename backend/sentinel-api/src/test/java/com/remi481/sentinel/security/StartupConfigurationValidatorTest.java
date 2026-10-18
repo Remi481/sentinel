@@ -1,14 +1,19 @@
 package com.remi481.sentinel.security;
 
 import com.remi481.sentinel.SentinelApiApplication;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.mock.env.MockEnvironment;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 
+import static com.remi481.sentinel.security.StartupConfigurationValidator.PLACEHOLDER_VALUE;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -106,6 +111,55 @@ class StartupConfigurationValidatorTest {
     }
 
     @Test
+    void productionRejectsShortDatabasePassword() {
+        MockEnvironment environment = validEnvironment()
+                .withProperty("SENTINEL_DB_PASSWORD", "change-me");
+        environment.setActiveProfiles("prod");
+        assertTrue(problems(environment).stream().anyMatch(problem -> problem.contains("SENTINEL_DB_PASSWORD")));
+    }
+
+    @Test
+    void productionRejectsPlaceholderDatabasePassword() {
+        MockEnvironment environment = validEnvironment()
+                .withProperty("SENTINEL_DB_PASSWORD", PLACEHOLDER_VALUE);
+        environment.setActiveProfiles("prod");
+        assertTrue(problems(environment).stream().anyMatch(problem -> problem.contains("SENTINEL_DB_PASSWORD")));
+    }
+
+    @Test
+    void productionAcceptsStrongDatabasePassword() {
+        MockEnvironment environment = validEnvironment()
+                .withProperty("SENTINEL_DB_PASSWORD", "a-strong-password-2026");
+        environment.setActiveProfiles("prod");
+        assertTrue(problems(environment).isEmpty());
+    }
+
+    @Test
+    void placeholderJwtSecretIsNamed() {
+        MockEnvironment environment = validEnvironment()
+                .withProperty("sentinel.security.jwt-secret", PLACEHOLDER_VALUE);
+        assertTrue(problems(environment).stream().anyMatch(problem -> problem.contains("SENTINEL_JWT_SECRET")));
+    }
+
+    @Test
+    void placeholderEnrollmentKeyIsNamed() {
+        MockEnvironment environment = validEnvironment()
+                .withProperty("sentinel.security.enrollment-key", PLACEHOLDER_VALUE);
+        assertTrue(problems(environment).stream().anyMatch(problem -> problem.contains("SENTINEL_ENROLLMENT_KEY")));
+    }
+
+    @Test
+    void envExampleUsesThePlaceholderTheValidatorRejects() throws Exception {
+        Path example = Path.of("..", "..", "deploy", ".env.example");
+        Assumptions.assumeTrue(Files.exists(example), "deploy/.env.example is not next to this module");
+        List<String> lines = Files.readAllLines(example, StandardCharsets.UTF_8);
+        for (String key : List.of("SENTINEL_DB_PASSWORD", "SENTINEL_JWT_SECRET", "SENTINEL_ENROLLMENT_KEY")) {
+            assertTrue(lines.contains(key + "=" + PLACEHOLDER_VALUE),
+                    key + " must be " + PLACEHOLDER_VALUE + " in deploy/.env.example so the API rejects it");
+        }
+    }
+
+    @Test
     void productionNeedsNoDatabasePasswordWhenNotActive() {
         assertDoesNotThrow(() -> problems(validEnvironment()));
     }
@@ -134,6 +188,19 @@ class StartupConfigurationValidatorTest {
                 "--SENTINEL_DB_PASSWORD=sentinel");
     }
 
+    @Test
+    void contextFailsWithPlaceholderDatabasePasswordInProductionAndNamesIt() {
+        assertStartupFailsNaming("SENTINEL_DB_PASSWORD",
+                "--spring.profiles.active=prod",
+                "--SENTINEL_DB_PASSWORD=" + PLACEHOLDER_VALUE);
+    }
+
+    @Test
+    void contextFailsWithPlaceholderEnrollmentKeyAndNamesIt() {
+        assertStartupFailsNaming("SENTINEL_ENROLLMENT_KEY",
+                "--sentinel.security.enrollment-key=" + PLACEHOLDER_VALUE);
+    }
+
     private void assertStartupFailsNaming(String variableName, String... arguments) {
         Throwable failure = null;
         try {
@@ -150,6 +217,7 @@ class StartupConfigurationValidatorTest {
         assertTrue(messages.contains(variableName),
                 "Expected the failure to name " + variableName + " but was: " + messages);
         assertFalse(messages.contains(VALID_SECRET), "The failure must not print secret values");
+        assertFalse(messages.contains(PLACEHOLDER_VALUE), "The failure must not print the rejected value");
     }
 
     private String allMessages(Throwable throwable) {
