@@ -41,10 +41,11 @@ Linux/macOS (bash):
 git clone <repository-url> sentinel
 cd sentinel/deploy
 
-# Create .env with strong random secrets.
-./scripts/generate-secrets.sh
+# Create .env from .env.example with fresh random secrets.
+# The script asks for the bootstrap admin password on a hidden prompt.
+./scripts/generate-secrets.sh --write
 
-# Edit .env and set at least SENTINEL_DOMAIN and SENTINEL_ADMIN_USERNAME.
+# Set at least SENTINEL_DOMAIN (use localhost to try it locally).
 $EDITOR .env
 
 docker compose up -d --build
@@ -56,34 +57,48 @@ Windows (PowerShell, no WSL needed):
 git clone <repository-url> sentinel
 cd sentinel\deploy
 
-# 1. Create .env from the template.
-Copy-Item .env.example .env
+# Create .env from .env.example with fresh random secrets.
+# The script asks for the bootstrap admin password on a hidden prompt.
+powershell -ExecutionPolicy Bypass -File .\scripts\generate-secrets.ps1 -Write
 
-# 2. Print four strong random secrets. This does not write them for you.
-powershell -ExecutionPolicy Bypass -File .\scripts\generate-secrets.ps1
-
-# 3. Open .env, replace the placeholders with the printed values, then set
-#    SENTINEL_DOMAIN (use localhost to try it locally) and
-#    SENTINEL_ADMIN_USERNAME.
+# Set at least SENTINEL_DOMAIN (use localhost to try it locally).
 notepad .env
 
-# 4. Start the stack.
 docker compose up -d --build
 ```
 
 In `.env` every line is `NAME=value`, with no spaces around the `=` and no quotes
-around the value. Paste the printed `SENTINEL_DB_PASSWORD`, `SENTINEL_JWT_SECRET`,
-`SENTINEL_ENROLLMENT_KEY` and `SENTINEL_ADMIN_PASSWORD`, and set `SENTINEL_DOMAIN`
-and `SENTINEL_ADMIN_USERNAME`. The `-ExecutionPolicy Bypass` flag is only needed
-if your execution policy blocks the script.
+around the value. The write mode replaces `SENTINEL_DB_PASSWORD`,
+`SENTINEL_JWT_SECRET` and `SENTINEL_ENROLLMENT_KEY` in place without showing
+them, takes `SENTINEL_ADMIN_PASSWORD` from the hidden prompt, leaves
+`SENTINEL_DOMAIN` alone, and sets `SENTINEL_ADMIN_USERNAME` to `admin` unless it
+already has a value. `SENTINEL_DOMAIN` is the one value you normally still edit.
+The `-ExecutionPolicy Bypass` flag is only needed if your execution policy blocks
+the script.
 
-`generate-secrets.ps1` only prints the values; it never writes a file. Save them
-in a password manager, because the enrolment key is needed again every time you
-enrol a new agent.
+The write mode never prints the values it writes, and it refuses to overwrite
+values that are already real unless you pass `--force` (`-Force` on Windows), so
+it is safe to run again.
 
-On Linux/macOS, `generate-secrets.sh` writes the values into `deploy/.env` for
-you (it never overwrites values you have already set, so it is safe to re-run).
-On Windows, copy the printed lines into `.env` yourself.
+PostgreSQL only reads `SENTINEL_DB_PASSWORD` when the database volume is first
+created, so changing it later in `.env` does not change the password inside an
+existing volume. For a trial, `docker compose down -v` throws the volume away so
+the new password takes effect.
+
+To paste the values in by hand instead, run the script without `--write` or
+`-Write`. That print-only mode shows one `NAME=value` line per secret and touches
+no file:
+
+```bash
+./scripts/generate-secrets.sh
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\generate-secrets.ps1
+```
+
+Save every printed value in a password manager, because the enrolment key is
+needed again every time you enrol a new agent.
 
 Then open your domain in a browser and log in with
 `SENTINEL_ADMIN_USERNAME` and `SENTINEL_ADMIN_PASSWORD`. The admin account is
@@ -100,12 +115,13 @@ curl -fsS https://your-domain/api/v1/health    # {"status":"UP"}
 
 All configuration lives in `deploy/.env` (started from `.env.example`). Compose
 fails to start if a required value is missing, and the API refuses to boot if any
-value is too weak, so misconfiguration surfaces immediately.
+value is too weak or still the `REPLACE_WITH_GENERATED_VALUE` placeholder from
+`.env.example`, so misconfiguration surfaces immediately.
 
 | Variable | Required | Notes |
 | --- | --- | --- |
 | `SENTINEL_DOMAIN` | yes | DNS name Caddy serves. Use `localhost` for a local trial; Caddy then uses its internal CA. |
-| `SENTINEL_DB_PASSWORD` | yes | Password for the bundled PostgreSQL. |
+| `SENTINEL_DB_PASSWORD` | yes | Password for the bundled PostgreSQL, at least 16 characters. |
 | `SENTINEL_JWT_SECRET` | yes | Dashboard JWT signing key, at least 32 bytes. |
 | `SENTINEL_ENROLLMENT_KEY` | yes | Shared agent enrolment key, at least 24 characters. |
 | `SENTINEL_ADMIN_USERNAME` | yes | Bootstrap admin username. |
@@ -113,8 +129,10 @@ value is too weak, so misconfiguration surfaces immediately.
 | `SENTINEL_INTERVAL_SECONDS` | no | Agent sample interval (default `30`). |
 
 `SENTINEL_DB_PASSWORD`, `SENTINEL_JWT_SECRET`, `SENTINEL_ENROLLMENT_KEY`, and
-`SENTINEL_ADMIN_PASSWORD` are generated by `scripts/generate-secrets.sh`. The
-script never overwrites a value you have already set, so it is safe to re-run.
+`SENTINEL_ADMIN_PASSWORD` are filled in by `scripts/generate-secrets.sh --write`
+(or `scripts\generate-secrets.ps1 -Write` on Windows), which prints no values.
+Re-running it refuses to overwrite values that are already real; pass `--force`
+(`-Force`) to replace them on purpose.
 
 Never commit `deploy/.env`; it is already in `.gitignore`.
 
@@ -247,6 +265,7 @@ docker compose exec db pg_isready -U sentinel
   and confirm the database is up.
 - **API exits immediately on start.** Startup validation prints every
   configuration problem in one message. Fix the values in `.env` and restart.
+- **Placeholder values left in `deploy/.env`.** If the api container keeps restarting, run `docker compose logs api --tail 30`; the first 'Sentinel cannot start' line names the variable that is wrong. If you left placeholder values in deploy/.env, the API will not start.
 - **Certificate not issued.** Confirm `SENTINEL_DOMAIN` resolves to the server
   and that port `80` is reachable.
 - **Agent stays `OFFLINE`.** Confirm the agent can reach `SENTINEL_API_URL` and

@@ -1,7 +1,7 @@
 # Production stack for a single Linux server.
 #
 #   cd deploy
-#   cp .env.example .env      # then fill in the values, or run scripts/generate-secrets.sh
+#   ./scripts/generate-secrets.sh --write   # create .env with fresh random secrets
 #   docker compose up -d --build
 #
 # Only the web (Caddy) service publishes ports. The API and database stay on the
