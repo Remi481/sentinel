@@ -119,6 +119,7 @@ services:
     build:
       context: ../agent
     restart: unless-stopped
+    hostname: sentinel-agent
     environment:
       SENTINEL_API_URL: http://api:8080
       SENTINEL_INTERVAL_SECONDS: ${SENTINEL_INTERVAL_SECONDS:-30}
