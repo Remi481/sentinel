@@ -11,6 +11,7 @@ import {
   formatRelative,
   formatRate,
   formatUptime,
+  formatUptimeAxis,
   computePercent,
 } from '../format'
 import type { Device, DeviceStatus, MetricReading } from '../types'
@@ -176,6 +177,11 @@ export default function DeviceDetail({
   const memoryPoints: ChartPoint[] = rows.map((r) => ({ t: r.t, v: r.memory }))
   const diskPoints: ChartPoint[] = rows.map((r) => ({ t: r.t, v: r.disk }))
   const uptimePoints: ChartPoint[] = rows.map((r) => ({ t: r.t, v: r.uptime }))
+  // Axis labels use minutes under 2 hours of uptime, whole hours above.
+  const maxUptimeHours = uptimePoints.reduce<number>(
+    (max, p) => (p.v != null && p.v > max ? p.v : max),
+    0,
+  )
   const networkPoints: ChartPoint[] = rows.map((r) => ({
     t: r.t,
     v: r.rx,
@@ -355,6 +361,9 @@ export default function DeviceDetail({
                 { key: 'v', label: 'Uptime', color: UPTIME_COLOR },
               ]}
               formatter={uptimeFormatter}
+              axisFormatter={(value) =>
+                formatUptimeAxis(value, maxUptimeHours)
+              }
             />
             <MetricChart
               title="Network throughput"

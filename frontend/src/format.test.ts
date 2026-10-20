@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest'
 import {
   EMPTY_VALUE,
   computePercent,
+  formatAxisTime,
   formatBytes,
   formatRate,
   formatRelative,
   formatUptime,
+  formatUptimeAxis,
 } from './format'
 
 describe('formatBytes', () => {
@@ -115,5 +117,55 @@ describe('formatRelative', () => {
     expect(formatRelative('2026-09-29T12:00:00Z', now)).toBe(
       new Date('2026-09-29T12:00:00Z').toLocaleString(),
     )
+  })
+})
+
+describe('formatAxisTime', () => {
+  // Local wall-clock components, so the expected strings are timezone-safe.
+  const t = new Date(2026, 9, 20, 9, 8, 7).getTime()
+
+  it('returns the placeholder for an invalid timestamp', () => {
+    expect(formatAxisTime(Number.NaN, 0)).toBe(EMPTY_VALUE)
+  })
+
+  it('includes seconds when the visible range is under 10 minutes', () => {
+    expect(formatAxisTime(t, 0)).toBe('09:08:07')
+    expect(formatAxisTime(t, 9 * 60 * 1000 - 1)).toBe('09:08:07')
+  })
+
+  it('drops seconds when the visible range is 10 minutes or more', () => {
+    expect(formatAxisTime(t, 10 * 60 * 1000)).toBe('09:08')
+    expect(formatAxisTime(t, 3 * 60 * 60 * 1000)).toBe('09:08')
+  })
+
+  it('pads single-digit hours, minutes and seconds', () => {
+    const early = new Date(2026, 9, 20, 4, 3, 2).getTime()
+    expect(formatAxisTime(early, 60 * 1000)).toBe('04:03:02')
+    expect(formatAxisTime(early, 60 * 60 * 1000)).toBe('04:03')
+  })
+})
+
+describe('formatUptimeAxis', () => {
+  it('returns the placeholder for invalid numbers', () => {
+    expect(formatUptimeAxis(Number.NaN, 1)).toBe(EMPTY_VALUE)
+    expect(formatUptimeAxis(1, Number.NaN)).toBe(EMPTY_VALUE)
+  })
+
+  it('labels in minutes when the largest value is under 2 hours', () => {
+    expect(formatUptimeAxis(0, 1.9)).toBe('0 min')
+    expect(formatUptimeAxis(0.5, 1.9)).toBe('30 min')
+    expect(formatUptimeAxis(1.25, 1.9)).toBe('75 min')
+  })
+
+  it('labels in whole hours when the largest value is 2 hours or more', () => {
+    expect(formatUptimeAxis(0, 2)).toBe('0 h')
+    expect(formatUptimeAxis(1, 5)).toBe('1 h')
+    expect(formatUptimeAxis(2.4, 3)).toBe('2 h')
+    expect(formatUptimeAxis(30.6, 40)).toBe('31 h')
+  })
+
+  it('never produces fractional-hour labels', () => {
+    expect(formatUptimeAxis(0.3, 10)).toBe('0 h')
+    expect(formatUptimeAxis(1.75, 10)).toBe('2 h')
   })
 })

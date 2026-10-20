@@ -7,7 +7,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { EMPTY_VALUE } from '../format'
+import { EMPTY_VALUE, formatAxisTime } from '../format'
 
 export interface ChartPoint {
   t: number
@@ -26,6 +26,7 @@ interface MetricChartProps {
   points: ChartPoint[]
   series: SeriesConfig[]
   formatter: (value: number) => string
+  axisFormatter?: (value: number) => string
   max?: number
 }
 
@@ -74,6 +75,7 @@ export default function MetricChart({
   points,
   series,
   formatter,
+  axisFormatter,
   max,
 }: MetricChartProps) {
   const hasData = points.some((point) =>
@@ -81,6 +83,11 @@ export default function MetricChart({
       (s) => point[s.key] != null && !Number.isNaN(Number(point[s.key])),
     ),
   )
+
+  // Visible time range: seconds (HH:mm:ss) under 10 minutes, HH:mm otherwise.
+  const times = points.map((p) => p.t).filter((t) => !Number.isNaN(t))
+  const timeSpanMs =
+    times.length > 1 ? Math.max(...times) - Math.min(...times) : 0
 
   return (
     <div className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
@@ -103,17 +110,14 @@ export default function MetricChart({
               dataKey="t"
               domain={['dataMin', 'dataMax']}
               tickFormatter={(value: number) =>
-                new Date(value).toLocaleTimeString([], {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })
+                formatAxisTime(value, timeSpanMs)
               }
               tick={{ fontSize: 11 }}
               className="text-neutral-400 dark:text-neutral-500"
             />
             <YAxis
               domain={max != null ? [0, max] : [0, 'auto']}
-              tickFormatter={formatter}
+              tickFormatter={axisFormatter ?? formatter}
               width={72}
               tick={{ fontSize: 11 }}
               className="text-neutral-400 dark:text-neutral-500"
