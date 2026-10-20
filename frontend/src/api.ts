@@ -73,6 +73,23 @@ export async function fetchDevices(baseUrl = ''): Promise<Device[]> {
   return (await response.json()) as Device[]
 }
 
+export async function fetchDevice(
+  uuid: string,
+  baseUrl = '',
+): Promise<Device> {
+  const response = await guardedFetch(
+    `${baseUrl}/api/v1/devices/${encodeURIComponent(uuid)}`,
+    { headers: authHeaders() },
+  )
+  if (response.status === 404) {
+    throw new DeviceNotFoundError(uuid)
+  }
+  if (!response.ok) {
+    throw new Error(`Failed to load device (HTTP ${response.status})`)
+  }
+  return (await response.json()) as Device
+}
+
 export async function fetchMetrics(
   uuid: string,
   baseUrl = '',

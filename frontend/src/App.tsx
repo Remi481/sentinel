@@ -152,7 +152,11 @@ function App() {
 
       <main className="mx-auto w-full max-w-6xl px-4 py-6">
         {selected ? (
-          <DeviceDetail device={selected} onBack={() => setSelected(null)} />
+          <DeviceDetail
+            key={selected.uuid}
+            device={selected}
+            onBack={() => setSelected(null)}
+          />
         ) : error ? (
           <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
             Cannot reach the Sentinel API

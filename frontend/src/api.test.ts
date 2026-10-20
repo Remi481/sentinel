@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  DeviceNotFoundError,
   InvalidCredentialsError,
   UnauthorizedError,
+  fetchDevice,
   fetchDevices,
   login,
   revokeDeviceToken,
@@ -62,6 +64,34 @@ describe('authenticated requests', () => {
     )
     expect(init.method).toBe('POST')
     expect(init.headers).toMatchObject({ Authorization: 'Bearer test-jwt' })
+  })
+})
+
+describe('fetchDevice', () => {
+  it('fetches a single device with the bearer token', async () => {
+    const device = { uuid: '9b2f8c01-9a1e-4b7a-8d5e-1a2b3c4d5e6f' }
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(device))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(fetchDevice(device.uuid)).resolves.toEqual(device)
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe(`/api/v1/devices/${device.uuid}`)
+    expect(init.headers).toMatchObject({ Authorization: 'Bearer test-jwt' })
+  })
+
+  it('maps a 404 to DeviceNotFoundError', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({}, 404)))
+
+    await expect(fetchDevice('missing-uuid')).rejects.toBeInstanceOf(
+      DeviceNotFoundError,
+    )
+  })
+
+  it('throws on other failures', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({}, 500)))
+
+    await expect(fetchDevice('any')).rejects.toThrow('HTTP 500')
   })
 })
 
