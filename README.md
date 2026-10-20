@@ -164,7 +164,6 @@ ports.
 ```bash
 cd deploy
 ./scripts/generate-secrets.sh --write   # create .env from .env.example with fresh random secrets
-$EDITOR .env                            # set SENTINEL_DOMAIN (the admin user defaults to admin)
 docker compose up -d --build
 ```
 
@@ -173,14 +172,23 @@ On Windows, no WSL is needed. In PowerShell:
 ```powershell
 cd deploy
 .\scripts\generate-secrets.ps1 -Write   # create .env with fresh random secrets, hidden admin password prompt
-notepad .env                            # set SENTINEL_DOMAIN (the admin user defaults to admin)
 docker compose up -d --build
 ```
+
+For a local trial the address to open is `https://localhost` (not `127.0.0.1` or
+an IP: the certificate only covers `localhost`). `SENTINEL_DOMAIN` defaults to
+`localhost`, so you do not need to edit `.env` to try the stack. On a real
+server, set `SENTINEL_DOMAIN` to the server's DNS name first.
 
 Neither write mode prints the values it writes, and neither overwrites values
 that are already real unless you also pass `--force` (`-Force`). To paste the
 values in yourself, run the same script without `--write` or `-Write`: the
 print-only mode shows one `NAME=value` line per secret and writes no file.
+
+If a browser reports a certificate error or `SSL_ERROR_INTERNAL_ERROR_ALERT`,
+`SENTINEL_DOMAIN` is not `localhost` or you opened the site by IP address; fix
+`SENTINEL_DOMAIN` in `deploy/.env`, run `docker compose up -d`, and open
+`https://localhost`.
 
 If the api container keeps restarting, run `docker compose logs api --tail 30`; the first 'Sentinel cannot start' line names the variable that is wrong. If you left placeholder values in deploy/.env, the API will not start.
 

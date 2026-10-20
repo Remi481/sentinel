@@ -42,11 +42,9 @@ git clone <repository-url> sentinel
 cd sentinel/deploy
 
 # Create .env from .env.example with fresh random secrets.
-# The script asks for the bootstrap admin password on a hidden prompt.
+# The script asks for the bootstrap admin password on a hidden prompt and
+# leaves SENTINEL_DOMAIN at its localhost default for a local trial.
 ./scripts/generate-secrets.sh --write
-
-# Set at least SENTINEL_DOMAIN (use localhost to try it locally).
-$EDITOR .env
 
 docker compose up -d --build
 ```
@@ -58,23 +56,27 @@ git clone <repository-url> sentinel
 cd sentinel\deploy
 
 # Create .env from .env.example with fresh random secrets.
-# The script asks for the bootstrap admin password on a hidden prompt.
+# The script asks for the bootstrap admin password on a hidden prompt and
+# leaves SENTINEL_DOMAIN at its localhost default for a local trial.
 powershell -ExecutionPolicy Bypass -File .\scripts\generate-secrets.ps1 -Write
-
-# Set at least SENTINEL_DOMAIN (use localhost to try it locally).
-notepad .env
 
 docker compose up -d --build
 ```
 
+For a local trial the address to open is `https://localhost`. Do not use
+`127.0.0.1` or an IP address: the certificate only covers the name
+`SENTINEL_DOMAIN`, so any other name shows a certificate error. On a real
+server, set `SENTINEL_DOMAIN` to the server's DNS name before starting the
+stack.
+
 In `.env` every line is `NAME=value`, with no spaces around the `=` and no quotes
 around the value. The write mode replaces `SENTINEL_DB_PASSWORD`,
 `SENTINEL_JWT_SECRET` and `SENTINEL_ENROLLMENT_KEY` in place without showing
-them, takes `SENTINEL_ADMIN_PASSWORD` from the hidden prompt, leaves
-`SENTINEL_DOMAIN` alone, and sets `SENTINEL_ADMIN_USERNAME` to `admin` unless it
-already has a value. `SENTINEL_DOMAIN` is the one value you normally still edit.
-The `-ExecutionPolicy Bypass` flag is only needed if your execution policy blocks
-the script.
+them, takes `SENTINEL_ADMIN_PASSWORD` from the hidden prompt, sets an empty or
+placeholder `SENTINEL_DOMAIN` to `localhost`, and sets `SENTINEL_ADMIN_USERNAME`
+to `admin` unless it already has a value. A real DNS name in `SENTINEL_DOMAIN`
+is never overwritten. The `-ExecutionPolicy Bypass` flag is only needed if your
+execution policy blocks the script.
 
 The write mode never prints the values it writes, and it refuses to overwrite
 values that are already real unless you pass `--force` (`-Force` on Windows), so
@@ -120,7 +122,7 @@ value is too weak or still the `REPLACE_WITH_GENERATED_VALUE` placeholder from
 
 | Variable | Required | Notes |
 | --- | --- | --- |
-| `SENTINEL_DOMAIN` | yes | DNS name Caddy serves. Use `localhost` for a local trial; Caddy then uses its internal CA. |
+| `SENTINEL_DOMAIN` | yes | Name Caddy serves and gets a certificate for. `.env.example` defaults to `localhost` for a local trial; set your server's DNS name for production. |
 | `SENTINEL_DB_PASSWORD` | yes | Password for the bundled PostgreSQL, at least 16 characters. |
 | `SENTINEL_JWT_SECRET` | yes | Dashboard JWT signing key, at least 32 bytes. |
 | `SENTINEL_ENROLLMENT_KEY` | yes | Shared agent enrolment key, at least 24 characters. |
@@ -148,10 +150,12 @@ reason:
 docker compose logs web
 ```
 
-For a local trial, set `SENTINEL_DOMAIN=localhost`. Caddy then issues a
-certificate from its own internal CA and serves `https://localhost`. Browsers do
-not trust that CA, so use `curl -k` or accept the warning; this mode is for
-testing, not for production.
+For a local trial `SENTINEL_DOMAIN` is already `localhost`, so Caddy issues a
+certificate from its own internal CA and serves `https://localhost`. Open
+`https://localhost`, not `127.0.0.1` or an IP address; the certificate only
+covers the name `localhost`, so anything else shows a certificate error.
+Browsers do not trust that CA, so use `curl -k` or accept the warning; this mode
+is for testing, not for production.
 
 ## Running an agent
 
@@ -268,6 +272,10 @@ docker compose exec db pg_isready -U sentinel
 - **Placeholder values left in `deploy/.env`.** If the api container keeps restarting, run `docker compose logs api --tail 30`; the first 'Sentinel cannot start' line names the variable that is wrong. If you left placeholder values in deploy/.env, the API will not start.
 - **Certificate not issued.** Confirm `SENTINEL_DOMAIN` resolves to the server
   and that port `80` is reachable.
+- **A browser error such as `SSL_ERROR_INTERNAL_ERROR_ALERT` or a certificate
+  error.** This usually means `SENTINEL_DOMAIN` is not `localhost`, or you opened
+  the site by IP address. Fix `SENTINEL_DOMAIN` in `deploy/.env`, run
+  `docker compose up -d`, and open `https://localhost`.
 - **Agent stays `OFFLINE`.** Confirm the agent can reach `SENTINEL_API_URL` and
   that `SENTINEL_ENROLLMENT_KEY` matches the API's value.
 - **The API container shows exit code `143` after a stop or restart.** This is
