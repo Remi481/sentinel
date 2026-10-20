@@ -58,6 +58,22 @@ export function formatRelative(
   return new Date(value).toLocaleString()
 }
 
+export function formatAxisTime(timestampMs: number, spanMs: number): string {
+  const date = new Date(timestampMs)
+  if (Number.isNaN(date.getTime())) return N_A_DASH
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  const seconds = String(date.getSeconds()).padStart(2, '0')
+  if (spanMs < 10 * 60 * 1000) return `${hours}:${minutes}:${seconds}`
+  return `${hours}:${minutes}`
+}
+
+export function formatUptimeAxis(hours: number, maxHours: number): string {
+  if (Number.isNaN(hours) || Number.isNaN(maxHours)) return N_A_DASH
+  if (maxHours < 2) return `${Math.round(hours * 60)} min`
+  return `${Math.round(hours)} h`
+}
+
 export function computePercent(
   part: number | null | undefined,
   total: number | null | undefined,

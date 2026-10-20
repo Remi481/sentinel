@@ -1,11 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
-import { DeviceNotFoundError, fetchMetrics, revokeDeviceToken } from '../api'
+import {
+  DeviceNotFoundError,
+  fetchDevice,
+  fetchMetrics,
+  revokeDeviceToken,
+} from '../api'
 import {
   formatBytes,
   formatPercent,
   formatRelative,
   formatRate,
   formatUptime,
+  formatUptimeAxis,
   computePercent,
 } from '../format'
 import type { Device, DeviceStatus, MetricReading } from '../types'
@@ -59,7 +65,11 @@ function uptimeFormatter(hours: number): string {
   return `${Number.isInteger(rounded) ? rounded : rounded.toFixed(1)} h`
 }
 
-export default function DeviceDetail({ device, onBack }: DeviceDetailProps) {
+export default function DeviceDetail({
+  device: initialDevice,
+  onBack,
+}: DeviceDetailProps) {
+  const [device, setDevice] = useState<Device>(initialDevice)
   const [metrics, setMetrics] = useState<MetricReading[] | null>(null)
   const [notFound, setNotFound] = useState(false)
   const [error, setError] = useState(false)
@@ -84,6 +94,8 @@ export default function DeviceDetail({ device, onBack }: DeviceDetailProps) {
     }
   }
 
+  const deviceUuid = device.uuid
+
   useEffect(() => {
     let cancelled = false
     let timeout: number | undefined
@@ -93,7 +105,15 @@ export default function DeviceDetail({ device, onBack }: DeviceDetailProps) {
       if (cancelled || inFlight) return
       inFlight = true
       try {
-        const data = await fetchMetrics(device.uuid)
+        // Refresh the device record so "Last seen" and status stay live. The
+        // two requests run in sequence so they never overlap.
+        const deviceData = await fetchDevice(deviceUuid)
+        if (cancelled) return
+        setDevice(deviceData)
+        setNotFound(false)
+        setError(false)
+
+        const data = await fetchMetrics(deviceUuid)
         if (cancelled) return
         setMetrics(data)
         setNotFound(false)
@@ -120,7 +140,15 @@ export default function DeviceDetail({ device, onBack }: DeviceDetailProps) {
     }
 
     function onVisibility() {
-      if (!document.hidden && timeout == null) schedule(0)
+      if (document.hidden) {
+        // Cancel the pending cycle so no request fires while hidden.
+        if (timeout != null) {
+          window.clearTimeout(timeout)
+          timeout = undefined
+        }
+      } else if (timeout == null) {
+        schedule(0)
+      }
     }
 
     void poll()
@@ -130,7 +158,7 @@ export default function DeviceDetail({ device, onBack }: DeviceDetailProps) {
       document.removeEventListener('visibilitychange', onVisibility)
       window.clearTimeout(timeout)
     }
-  }, [device.uuid])
+  }, [deviceUuid])
 
   const rows = useMemo<ChartRow[]>(() => {
     if (!metrics) return []
@@ -149,6 +177,11 @@ export default function DeviceDetail({ device, onBack }: DeviceDetailProps) {
   const memoryPoints: ChartPoint[] = rows.map((r) => ({ t: r.t, v: r.memory }))
   const diskPoints: ChartPoint[] = rows.map((r) => ({ t: r.t, v: r.disk }))
   const uptimePoints: ChartPoint[] = rows.map((r) => ({ t: r.t, v: r.uptime }))
+  // Axis labels use minutes under 2 hours of uptime, whole hours above.
+  const maxUptimeHours = uptimePoints.reduce<number>(
+    (max, p) => (p.v != null && p.v > max ? p.v : max),
+    0,
+  )
   const networkPoints: ChartPoint[] = rows.map((r) => ({
     t: r.t,
     v: r.rx,
@@ -206,7 +239,10 @@ export default function DeviceDetail({ device, onBack }: DeviceDetailProps) {
             {device.ipAddress ? ` · ${device.ipAddress}` : ''}
             {device.agentVersion ? ` · agent v${device.agentVersion}` : ''}
           </p>
-          <p className="mt-0.5 text-xs text-neutral-400 dark:text-neutral-500">
+          <p
+            data-testid="device-last-seen"
+            className="mt-0.5 text-xs text-neutral-400 dark:text-neutral-500"
+          >
             Last seen {formatRelative(device.lastSeen)}
           </p>
         </div>
@@ -325,6 +361,9 @@ export default function DeviceDetail({ device, onBack }: DeviceDetailProps) {
                 { key: 'v', label: 'Uptime', color: UPTIME_COLOR },
               ]}
               formatter={uptimeFormatter}
+              axisFormatter={(value) =>
+                formatUptimeAxis(value, maxUptimeHours)
+              }
             />
             <MetricChart
               title="Network throughput"
