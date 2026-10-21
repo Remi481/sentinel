@@ -48,7 +48,7 @@ afterEach(() => {
 })
 
 describe('App device selection', () => {
-  it('never shows the previous device record when opening a different device', async () => {
+  it('shows the refreshed device record when a device is opened', async () => {
     const alpha = makeDevice()
     const bravo = makeDevice({ uuid: 'uuid-b', hostname: 'bravo' })
 
