@@ -225,3 +225,7 @@ cd frontend && npm test && npm run lint
 ## License
 
 This project is licensed under the MIT License.
+
+## WTC Verification
+
+WTC-R8AEZ2MG
